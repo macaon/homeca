@@ -57,6 +57,7 @@
     <div class="fields" id="fields">
       <label data-for="intermediate leaf csr">Issuer
         <select id="f-parent"></select></label>
+      <p class="warn" id="root-warn" data-for="leaf csr" hidden>Issuing directly from a root works, but it keeps the root key in daily use and its CRL covers every leaf. Prefer an intermediate.</p>
       <label data-for="root intermediate leaf">Common name
         <input id="f-cn" placeholder="e.g. Home Root CA" required></label>
       <label data-for="leaf csr">Subject alternative names <small>one per line: DNS names, IPs or emails</small>

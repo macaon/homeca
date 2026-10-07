@@ -48,7 +48,8 @@ async function load() {
   const live = certs.filter((c) => c.status !== "revoked" && !c.superseded);
   const count = (st) => live.filter((c) => c.status === st).length;
   $("stats").innerHTML = [
-    [certs.filter((c) => c.kind !== "leaf").length, "CAs"],
+    [certs.filter((c) => c.kind === "root").length, "Root CAs"],
+    [certs.filter((c) => c.kind === "intermediate").length, "Intermediates"],
     [live.filter((c) => c.kind === "leaf" && c.status !== "expired").length, "Active leaves"],
     [count("expiring"), "Expiring ≤ 30 d"],
     [count("expired"), "Expired"],
@@ -146,13 +147,19 @@ function setKind(k) {
   const inter = ok.filter((c) => c.kind === "intermediate").pop();
   if (k !== "intermediate" && inter) $("f-parent").value = inter.id;
   warnDays();
+  warnRoot();
 }
+function warnRoot() {
+  const c = certs.find((c) => c.id === +$("f-parent").value);
+  $("root-warn").hidden = !((kind === "leaf" || kind === "csr") && c && c.kind === "root");
+}
+$("f-parent").onchange = warnRoot;
 function warnDays() {
   $("days-warn").hidden = !((kind === "leaf" || kind === "csr") && $("f-usage").value !== "client" && +$("f-days").value > 398);
 }
 $("f-days").oninput = $("f-usage").onchange = warnDays;
 document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => setKind(b.dataset.kind)));
-$("new-btn").onclick = () => { $("new-err").textContent = ""; setKind(certs.length ? "leaf" : "root"); $("new").showModal(); };
+$("new-btn").onclick = () => { $("new-err").textContent = ""; setKind(!certs.length ? "root" : certs.some((c) => c.kind === "intermediate") ? "leaf" : "intermediate"); $("new").showModal(); };
 
 $("new-form").onsubmit = async (e) => {
   e.preventDefault();

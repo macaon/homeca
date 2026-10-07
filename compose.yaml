@@ -1,0 +1,16 @@
+services:
+  homeca:
+    build:
+      context: .
+      dockerfile: Containerfile
+    ports: ["8080:8080"]
+    volumes: ["homeca-data:/data"]
+    environment:
+      # Where devices reach this service; embedded in issued certs as CRL/CA-issuer URLs. Must be plain HTTP.
+      HOMECA_PUBLIC_URL: http://ca.home.arpa:8080
+      # Set to 1 once the UI is served over HTTPS by your reverse proxy
+      HOMECA_SECURE_COOKIE: "0"
+    restart: unless-stopped
+
+volumes:
+  homeca-data:

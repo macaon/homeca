@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>homeca</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M16 6l8 3v6c0 5-3.5 8.5-8 11-4.500-2.500-8-6-8-11V9z' fill='none' stroke='white' stroke-width='2.200' stroke-linejoin='round'/%3E%3Cpath d='M12.500 16l2.500 2.500 4.500-5' fill='none' stroke='white' stroke-width='2.200' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<main id="auth" hidden>
+  <form class="card auth" id="auth-form">
+    <div class="logo">homeca</div>
+    <p class="muted" id="auth-hint"></p>
+    <label>Passphrase <input type="password" id="pw" autocomplete="current-password" required></label>
+    <label id="pw2-row" hidden>Repeat passphrase <input type="password" id="pw2" autocomplete="new-password"></label>
+    <button class="primary" id="auth-btn"></button>
+    <p class="error" id="auth-err" role="alert"></p>
+  </form>
+</main>
+
+<div id="app" hidden>
+  <header>
+    <div class="logo">homeca</div>
+    <span class="spacer"></span>
+    <button class="primary" id="new-btn">+ New</button>
+    <button id="logout-btn">Log out</button>
+  </header>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="card" id="attention-card" hidden>
+    <h2>Needs attention</h2>
+    <ul class="list" id="attention"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Certificates</h2>
+    <div id="tree"></div>
+    <p class="muted" id="empty" hidden>Nothing here yet. Create a root CA with <b>+ New</b> to get started.</p>
+  </section>
+</div>
+
+<dialog id="detail"></dialog>
+
+<dialog id="new">
+  <form id="new-form" method="dialog">
+    <div class="dlg-head"><h2>New certificate</h2><button type="button" class="ghost" data-close>✕</button></div>
+    <div class="tabs" id="tabs" role="tablist">
+      <button type="button" data-kind="root" role="tab">Root CA</button>
+      <button type="button" data-kind="intermediate" role="tab">Intermediate CA</button>
+      <button type="button" data-kind="leaf" role="tab">Leaf</button>
+      <button type="button" data-kind="csr" role="tab">Sign CSR</button>
+    </div>
+
+    <div class="fields" id="fields">
+      <label data-for="intermediate leaf csr">Issuer
+        <select id="f-parent"></select></label>
+      <label data-for="root intermediate leaf">Common name
+        <input id="f-cn" placeholder="e.g. Home Root CA" required></label>
+      <label data-for="leaf csr">Subject alternative names <small>one per line: DNS names, IPs or emails</small>
+        <textarea id="f-sans" rows="3" placeholder="nas.home.arpa&#10;192.168.1.10"></textarea></label>
+      <label data-for="leaf csr">Usage
+        <select id="f-usage"><option value="server">Server (TLS)</option><option value="client">Client (mTLS)</option><option value="both">Both</option></select></label>
+      <label data-for="csr">Certificate signing request (PEM)
+        <textarea id="f-csr" rows="6" placeholder="-----BEGIN CERTIFICATE REQUEST-----"></textarea></label>
+      <label data-for="intermediate">Name constraints <small>optional, one per line: <code>home.arpa</code>, <code>10.0.0.0/8</code></small>
+        <textarea id="f-permitted" rows="2"></textarea></label>
+      <div class="row" data-for="root intermediate leaf csr">
+        <label>Valid for (days) <input id="f-days" type="number" min="1" max="36500" required></label>
+        <label data-for="root intermediate leaf">Key
+          <select id="f-key"><option value="ec256">ECDSA P-256</option><option value="ec384">ECDSA P-384</option>
+            <option value="rsa2048">RSA 2048</option><option value="rsa3072">RSA 3072</option><option value="rsa4096">RSA 4096</option></select></label>
+        <label data-for="intermediate">Path length <input id="f-pathlen" type="number" min="0" max="10" value="0"></label>
+      </div>
+      <p class="warn" id="days-warn" hidden>Apple platforms reject server certificates valid for more than 398 days.</p>
+      <details data-for="root intermediate leaf"><summary>More subject fields</summary>
+        <div class="row">
+          <label>Organisation <input id="f-o"></label>
+          <label>Unit <input id="f-ou"></label>
+        </div>
+        <div class="row">
+          <label>Country <input id="f-c" maxlength="2" placeholder="SE"></label>
+          <label>State <input id="f-st"></label>
+          <label>Locality <input id="f-l"></label>
+        </div>
+      </details>
+    </div>
+    <p class="error" id="new-err" role="alert"></p>
+    <div class="dlg-foot"><button type="button" data-close>Cancel</button><button class="primary" id="new-submit">Create</button></div>
+  </form>
+</dialog>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

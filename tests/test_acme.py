@@ -223,3 +223,19 @@ def test_self_tls_cert():
     assert leaf.subject.rfc4514_string() == "CN=ca.home.arpa"
     assert oct(os.stat(key).st_mode & 0o777) == "0o600"
     serialization.load_pem_private_key(Path(key).read_bytes(), None)
+
+
+def test_same_name_certs_stay_independent(ui, monkeypatch):
+    """homeca's own TLS cert and an ACME cert (say NPM's) for the same name must not mark each other superseded."""
+    from app.__main__ import ensure_tls
+    ensure_tls()
+    monkeypatch.setattr(acme, "validate_http01", lambda *a: (True, None))
+    c = Client()
+    c.register()
+    o = c.post(c.dir["newOrder"], {"identifiers": [{"type": "dns", "value": "ca.home.arpa"}]}).json()
+    c.post(c.post(o["authorizations"][0], None).json()["challenges"][0]["url"], {})
+    csr, _ = csr_der(["ca.home.arpa"])
+    assert c.post(o["finalize"], {"csr": b64(csr)}).json()["status"] == "valid"  # later and longer-lived than the self cert
+    rows = [x for x in ui.get("/api/certs").json() if x["cn"] == "ca.home.arpa" and x["status"] == "valid"]
+    assert sorted((x["self"], x["acme"]) for x in rows) == [(False, True), (True, False)]
+    assert not any(x["superseded"] for x in rows)

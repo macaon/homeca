@@ -204,11 +204,15 @@ def list_certs(_: str = Depends(session)):
     with db() as c:
         rows = c.execute("SELECT * FROM certs").fetchall()
     out = []
+    meta = {r["id"]: json.loads(r["params"]) for r in rows}
+    # Certificates for the same name only supersede each other within the same origin: homeca's own
+    # HTTPS certificate, ACME-issued ones (e.g. NPM's) and hand-issued ones are independent.
+    origin = lambda r: "self" if meta[r["id"]].get("self") else "acme" if meta[r["id"]].get("acme") else "manual"  # noqa: E731
     for r in rows:
         st, days = status_of(r)
-        p = json.loads(r["params"])
+        p = meta[r["id"]]
         newer = any(o["parent_id"] == r["parent_id"] and o["cn"] == r["cn"] and o["id"] != r["id"] and not o["revoked_at"]
-                    and o["kind"] == "leaf" and o["not_after"] > r["not_after"] for o in rows)
+                    and o["kind"] == "leaf" and o["not_after"] > r["not_after"] and origin(o) == origin(r) for o in rows)
         out.append({"id": r["id"], "parent_id": r["parent_id"], "kind": r["kind"], "cn": r["cn"],
                     "not_after": r["not_after"], "status": st, "days_left": days, "superseded": newer,
                     "sans": p.get("sans", []), "has_key": bool(r["key_enc"]), "crl_next": r["crl_next"],

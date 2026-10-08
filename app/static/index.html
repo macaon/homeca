@@ -13,8 +13,9 @@
   <form class="card auth" id="auth-form">
     <div class="logo">homeca</div>
     <p class="muted" id="auth-hint"></p>
-    <label>Passphrase <input type="password" id="pw" autocomplete="current-password" required></label>
-    <label id="pw2-row" hidden>Repeat passphrase <input type="password" id="pw2" autocomplete="new-password"></label>
+    <label>Username <input id="user" autocomplete="username" required></label>
+    <label>Password <input type="password" id="pw" autocomplete="current-password" required></label>
+    <label id="pw2-row" hidden>Repeat password <input type="password" id="pw2" autocomplete="new-password"></label>
     <button class="primary" id="auth-btn"></button>
     <p class="error" id="auth-err" role="alert"></p>
   </form>
@@ -25,10 +26,16 @@
     <div class="logo">homeca</div>
     <span class="spacer"></span>
     <button class="primary" id="new-btn">+ New</button>
+    <button id="pwd-btn">Password</button>
     <button id="logout-btn">Log out</button>
   </header>
 
   <section class="stats" id="stats"></section>
+
+  <section class="card" id="acme-card">
+    <h2>ACME</h2>
+    <div id="acme"></div>
+  </section>
 
   <section class="card" id="attention-card" hidden>
     <h2>Needs attention</h2>
@@ -43,6 +50,17 @@
 </div>
 
 <dialog id="detail"></dialog>
+
+<dialog id="pwdlg">
+  <form id="pw-form" method="dialog">
+    <div class="dlg-head"><h2>Change password</h2><button type="button" class="ghost" data-close>✕</button></div>
+    <label>Current password <input type="password" id="pw-cur" autocomplete="current-password" required></label>
+    <label>New password <small>12+ characters</small> <input type="password" id="pw-new" autocomplete="new-password" minlength="12" required></label>
+    <p class="muted">Other sessions are signed out. Private keys are not affected; they use the master key.</p>
+    <p class="error" id="pw-err" role="alert"></p>
+    <div class="dlg-foot"><button type="button" data-close>Cancel</button><button class="primary">Change</button></div>
+  </form>
+</dialog>
 
 <dialog id="new">
   <form id="new-form" method="dialog">

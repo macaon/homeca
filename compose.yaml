@@ -3,14 +3,25 @@ services:
     build:
       context: .
       dockerfile: Containerfile
-    ports: ["8080:8080"]
+    ports:
+      - "8080:8080"   # UI, CRL and CA downloads (plain HTTP)
+      - "8443:8443"   # ACME over HTTPS; starts once an ACME CA is selected in the UI
     volumes: ["homeca-data:/data"]
+    secrets: [master_key]
     environment:
-      # Where devices reach this service; embedded in issued certs as CRL/CA-issuer URLs. Must be plain HTTP.
+      HOMECA_MASTER_KEY_FILE: /run/secrets/master_key
+      # Where devices reach the plain-HTTP port; embedded in issued certs as CRL/CA-issuer URLs.
       HOMECA_PUBLIC_URL: http://ca.home.arpa:8080
+      # ACME: the name clients use for this service (it gets its own TLS cert) and who may use it.
+      HOMECA_ACME_HOSTNAME: ca.home.arpa
+      HOMECA_ACME_CLIENTS: 10.1.1.0/24
       # Set to 1 once the UI is served over HTTPS by your reverse proxy
       HOMECA_SECURE_COOKIE: "0"
     restart: unless-stopped
+
+secrets:
+  master_key:
+    file: ./master.key   # readable by uid 10001: chown 10001 master.key && chmod 400 master.key
 
 volumes:
   homeca-data:

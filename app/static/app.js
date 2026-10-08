@@ -21,24 +21,32 @@ async function init() {
   if (s.logged_in) return load();
   $("pw2-row").hidden = !s.setup_needed;
   $("pw2").required = s.setup_needed;
-  $("auth-btn").textContent = s.setup_needed ? "Create CA store" : "Unlock";
+  $("auth-btn").textContent = s.setup_needed ? "Create admin user" : "Log in";
   $("auth-hint").textContent = s.setup_needed
-    ? "First run: choose a passphrase (12+ characters). It encrypts every private key and can't be recovered."
-    : "Enter your passphrase to unlock.";
+    ? "First run: choose an admin username and a password (12+ characters). Private keys are encrypted separately, with the master key file."
+    : "Log in to manage your CA.";
   $("pw").autocomplete = s.setup_needed ? "new-password" : "current-password";
-  $("pw").focus();
+  $("user").focus();
   window.setupNeeded = s.setup_needed;
 }
 
 $("auth-form").onsubmit = async (e) => {
   e.preventDefault();
   $("auth-err").textContent = "";
-  if (window.setupNeeded && $("pw").value !== $("pw2").value) return ($("auth-err").textContent = "Passphrases don't match");
+  if (window.setupNeeded && $("pw").value !== $("pw2").value) return ($("auth-err").textContent = "Passwords don't match");
   try {
-    await api(window.setupNeeded ? "/api/setup" : "/api/login", "POST", { passphrase: $("pw").value });
+    await api(window.setupNeeded ? "/api/setup" : "/api/login", "POST", { username: $("user").value, password: $("pw").value });
     $("pw").value = $("pw2").value = "";
     init();
   } catch (err) { $("auth-err").textContent = err.message; }
+};
+$("pwd-btn").onclick = () => { $("pw-err").textContent = ""; $("pw-form").reset(); $("pwdlg").showModal(); };
+$("pw-form").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/password", "POST", { current: $("pw-cur").value, new: $("pw-new").value });
+    $("pwdlg").close();
+  } catch (err) { $("pw-err").textContent = err.message; }
 };
 $("logout-btn").onclick = async () => { await api("/api/logout", "POST"); init(); };
 
@@ -58,6 +66,7 @@ async function load() {
 
   const attn = live.filter((c) => c.status === "expiring" || c.status === "expired")
     .sort((a, b) => a.days_left - b.days_left);
+  renderAcme(await api("/api/acme"));
   $("attention-card").hidden = !attn.length;
   $("attention").innerHTML = attn.map(nodeHtml).join("");
 
@@ -66,11 +75,29 @@ async function load() {
   document.querySelectorAll(".node").forEach((n) => (n.onclick = () => show(+n.dataset.id)));
 }
 
+function renderAcme(a) {
+  const inters = certs.filter((c) => c.kind === "intermediate" && c.status === "valid");
+  const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+  const state = a.enabled ? `<span class="badge valid">enabled</span>`
+    : `<span class="badge expiring">${a.ca_id ? "no clients allowed" : "off"}</span>`;
+  $("acme").innerHTML = `<p>${state} <span class="muted">Let NPM, certbot or Caddy request and renew certificates automatically.</span></p>
+    <dl class="kv">
+      ${row("Issuing CA", a.ca_id ? esc(a.ca_cn) : `<span class="muted">none. Open an intermediate and choose <b>Use for ACME</b>.</span>`)}
+      ${row("Directory", a.directory ? `<code>${esc(a.directory)}</code>` : `<span class="muted">set HOMECA_ACME_HOSTNAME</span>`)}
+      ${row("Allowed clients", a.clients.length ? esc(a.clients.join(", ")) : `<span class="muted">none. Set HOMECA_ACME_CLIENTS.</span>`)}
+      ${row("Lifetime", `${a.days} days`)}
+    </dl>
+    ${a.ca_id ? `<button id="acme-off">Turn off</button>` : !inters.length ? `<p class="muted">Create an intermediate CA first.</p>` : ""}`;
+  const off = $("acme-off");
+  if (off) off.onclick = async () => { await api("/api/acme/ca", "POST", { id: null }); load(); };
+}
+
 const badge = (c) => c.status === "valid" ? `<span class="badge valid">valid</span>` : `<span class="badge ${c.status}">${c.status}</span>`;
 function nodeHtml(c) {
   const sub = c.status === "revoked" ? "" : c.days_left < 0 ? `expired ${-c.days_left} d ago` : `${c.days_left} d left`;
   return `<li><button class="node ${c.superseded ? "dim" : ""}" data-id="${c.id}">
     <span class="badge kind">${KIND[c.kind]}</span><span class="cn">${esc(c.cn)}</span>
+    ${c.acme || c.self ? `<span class="badge kind">ACME</span>` : ""}
     ${c.superseded ? `<span class="badge superseded">superseded</span>` : ""}
     <span class="sub">${esc(sub)}</span>${badge(c)}</button></li>`;
 }
@@ -105,7 +132,8 @@ async function show(id) {
     <div class="actions">
       ${dl("pem", "Certificate")}${dl("chain", "Full chain")}${dl("der", "DER")}
       ${d.has_key ? dl("key", "Private key") + `<button id="p12">PKCS#12…</button>` : ""}
-      ${d.kind === "leaf" ? `<button id="renew">Renew</button>` : ""}
+      ${d.kind === "leaf" && !d.acme && !d.self ? `<button id="renew">Renew</button>` : ""}
+      ${d.kind === "intermediate" && d.status === "valid" ? `<button id="use-acme">Use for ACME</button>` : ""}
       ${d.parent_id && !d.revoked_at ? `<button class="danger" id="revoke">Revoke…</button>` : ""}
       <button class="danger" id="del">Delete</button>
     </div>
@@ -117,6 +145,7 @@ async function show(id) {
     const pw = prompt("Password to protect the .p12 file (many importers require one):");
     if (pw !== null) location.href = `/api/certs/${id}/download?format=p12&pw_p12=${encodeURIComponent(pw)}`;
   });
+  act("#use-acme", async () => { await api("/api/acme/ca", "POST", { id }); $("detail").close(); load(); });
   act("#renew", async () => { const r = await api(`/api/certs/${id}/renew`, "POST"); await load(); show(r.id); });
   act("#revoke", async () => {
     const reason = prompt("Reason: unspecified, key_compromise, affiliation_changed, superseded, cessation_of_operation", "unspecified");

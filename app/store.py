@@ -15,6 +15,18 @@ CREATE TABLE IF NOT EXISTS certs (
   revoked_at TEXT, revoke_reason TEXT,
   crl_der BLOB, crl_next TEXT, crl_number INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS acme_accounts (
+  id INTEGER PRIMARY KEY, jwk TEXT NOT NULL, thumbprint TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'valid', contact TEXT, created TEXT
+);
+CREATE TABLE IF NOT EXISTS acme_orders (
+  id TEXT PRIMARY KEY, account_id INTEGER NOT NULL, status TEXT NOT NULL,
+  identifiers TEXT NOT NULL, expires TEXT NOT NULL, cert_id INTEGER, error TEXT
+);
+CREATE TABLE IF NOT EXISTS acme_authz (
+  id TEXT PRIMARY KEY, order_id TEXT NOT NULL, name TEXT NOT NULL, token TEXT NOT NULL,
+  status TEXT NOT NULL, expires TEXT NOT NULL, error TEXT
+);
 """
 
 

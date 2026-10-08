@@ -85,6 +85,13 @@ to Let's Encrypt can use it. Certificates are per host name; wildcards (which ne
 
 **In NPM** (the setting is environment-only; there is no GUI field)
 
+> **Warning: `LE_SERVER` applies to the whole NPM instance.** It is passed to certbot for every issue
+> *and renewal*, so an NPM that also serves public sites with real Let's Encrypt certificates will fail to
+> renew them. Only set it on an NPM used for internal hosts only, which needs its own host or IP for
+> ports 80/443 if you already run another one. If you keep a single NPM for both, don't use this; upload
+> HomeCA certificates as custom certificates in NPM instead, or point other ACME clients (Proxmox, Caddy,
+> certbot, ...) at HomeCA.
+
     environment:
       LE_SERVER: https://ca.home.arpa:8443/acme/directory
       REQUESTS_CA_BUNDLE: /homeca-root.pem          # so certbot trusts homeca's TLS
@@ -94,7 +101,6 @@ to Let's Encrypt can use it. Certificates are per host name; wildcards (which ne
 Then add certificates in NPM as usual with **Let's Encrypt**. NPM requests them from HomeCA and renews
 them itself. Notes:
 
-- With `LE_SERVER` set, NPM can no longer get real Let's Encrypt certificates.
 - For HTTP-01, HomeCA must be able to resolve the host name and reach port 80 on NPM.
 - The same works with plain certbot: `certbot certonly --standalone --server https://ca.home.arpa:8443/acme/directory -d host.home.arpa`
   with `REQUESTS_CA_BUNDLE` pointing at the root. To revoke, pass the same `--server`.

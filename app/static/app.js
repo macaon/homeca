@@ -97,7 +97,7 @@ function nodeHtml(c) {
   const sub = c.status === "revoked" ? "" : c.days_left < 0 ? `expired ${-c.days_left} d ago` : `${c.days_left} d left`;
   return `<li><button class="node ${c.superseded ? "dim" : ""}" data-id="${c.id}">
     <span class="badge kind">${KIND[c.kind]}</span><span class="cn">${esc(c.cn)}</span>
-    ${c.self ? `<span class="badge kind" title="homeca's own HTTPS certificate (ACME port)">homeca TLS</span>` : c.acme ? `<span class="badge kind">ACME</span>` : ""}
+    ${c.self ? `<span class="badge kind" title="HomeCA's own HTTPS certificate (ACME port)">HomeCA TLS</span>` : c.acme ? `<span class="badge kind">ACME</span>` : ""}
     ${c.superseded ? `<span class="badge superseded">superseded</span>` : ""}
     <span class="sub">${esc(sub)}</span>${badge(c)}</button></li>`;
 }
@@ -119,7 +119,7 @@ async function show(id) {
     <div class="dlg-head"><h2>${esc(d.subject)}</h2><button class="ghost" data-close>✕</button></div>
     <p><span class="badge kind">${KIND[d.kind]}</span> ${badge(d)}
       ${d.revoked_at ? `<span class="muted">revoked ${fmtDate(d.revoked_at)} (${esc(d.revoke_reason)})</span>` : ""}</p>
-    ${d.self ? `<p class="muted">homeca's own HTTPS certificate for the ACME port. It renews automatically and is separate from any ACME-issued certificate with the same name.</p>` : ""}
+    ${d.self ? `<p class="muted">HomeCA's own HTTPS certificate for the ACME port. It renews automatically and is separate from any ACME-issued certificate with the same name.</p>` : ""}
     <div class="bar ${d.status}"><i style="width:${pct}%"></i></div>
     <div class="muted">${fmtDate(d.not_before)} → ${fmtDate(d.not_after)}${d.days_left != null ? ` · ${d.days_left} days left` : ""}</div>
     <dl class="kv">

@@ -1,10 +1,10 @@
-# homeca
+# HomeCA
 
 A small, self-hosted certificate authority with a web UI, built for homelabs.
 
 It exists because some CA tools don't write Subject/Authority Key Identifier (SKI/AKI) extensions,
 which breaks strict chain validation (`openssl verify -x509_strict`, and some Java, Go and Apple
-clients). Every certificate homeca issues goes through one function, `pki.issue()`, so those
+clients). Every certificate HomeCA issues goes through one function, `pki.issue()`, so those
 extensions cannot be forgotten.
 
 ## Features
@@ -47,7 +47,7 @@ Environment variables:
 | `HOMECA_PUBLIC_URL` | unset | Base URL devices use to reach the plain-HTTP port, e.g. `http://ca.home.arpa:8080`. Embedded in issued certs as the CRL distribution point and CA-issuer (AIA) URL. If unset, those extensions are omitted. Keep it plain HTTP: clients must not need TLS to validate TLS. |
 | `HOMECA_SECURE_COOKIE` | `0` | Set `1` once the UI is served over HTTPS by your reverse proxy |
 | `HOMECA_ACME_CLIENTS` | unset | Comma-separated CIDRs allowed to use ACME, e.g. `10.1.1.0/24` or NPM's IP. **Empty disables ACME.** |
-| `HOMECA_ACME_HOSTNAME` | unset | Name ACME clients use for homeca, e.g. `ca.home.arpa`. homeca issues itself a TLS certificate for it. |
+| `HOMECA_ACME_HOSTNAME` | unset | Name ACME clients use for HomeCA, e.g. `ca.home.arpa`. HomeCA issues itself a TLS certificate for it. |
 | `HOMECA_TLS_PORT` | `8443` | Port of the HTTPS (ACME) listener |
 | `HOMECA_ACME_DAYS` | `90` | Lifetime of ACME-issued certificates |
 
@@ -70,16 +70,16 @@ RFC 5280 requires.
 
 ## ACME and Nginx Proxy Manager
 
-homeca implements the ACME protocol (RFC 8555) with the HTTP-01 challenge, so tools that normally talk
+HomeCA implements the ACME protocol (RFC 8555) with the HTTP-01 challenge, so tools that normally talk
 to Let's Encrypt can use it. Certificates are per host name; wildcards (which need DNS-01) are not supported.
 
-**In homeca**
+**In HomeCA**
 
 1. Create an intermediate CA, ideally with a name constraint such as `home.arpa`. ACME refuses names
    outside the CA's constraints.
 2. Open the intermediate and choose **Use for ACME**. The ACME card then shows the directory URL.
 3. Set `HOMECA_ACME_CLIENTS` to the address of your ACME client and `HOMECA_ACME_HOSTNAME` to a name that
-   resolves to homeca, then restart. homeca issues itself a TLS certificate for that name from the chosen
+   resolves to HomeCA, then restart. HomeCA issues itself a TLS certificate for that name from the chosen
    CA and starts the HTTPS listener on 8443 (it can take about ten seconds after selecting the CA).
    That certificate is renewed automatically with no restart.
 
@@ -91,17 +91,17 @@ to Let's Encrypt can use it. Certificates are per host name; wildcards (which ne
     volumes:
       - ./homeca-root.pem:/homeca-root.pem:ro       # download from homeca: /ca/<root id>.pem
 
-Then add certificates in NPM as usual with **Let's Encrypt**. NPM requests them from homeca and renews
+Then add certificates in NPM as usual with **Let's Encrypt**. NPM requests them from HomeCA and renews
 them itself. Notes:
 
 - With `LE_SERVER` set, NPM can no longer get real Let's Encrypt certificates.
-- For HTTP-01, homeca must be able to resolve the host name and reach port 80 on NPM.
+- For HTTP-01, HomeCA must be able to resolve the host name and reach port 80 on NPM.
 - The same works with plain certbot: `certbot certonly --standalone --server https://ca.home.arpa:8443/acme/directory -d host.home.arpa`
   with `REQUESTS_CA_BUNDLE` pointing at the root. To revoke, pass the same `--server`.
-- The client allowlist uses the real peer address. Docker's default port publishing keeps it; if homeca
+- The client allowlist uses the real peer address. Docker's default port publishing keeps it; if HomeCA
   sees a bridge address instead of NPM's, put both on one Docker network and allow that subnet.
 - ACME-issued certificates have no stored key (the client holds it) and renew through ACME, so
-  homeca's own Renew button is hidden for them. `X-Forwarded-For` is deliberately ignored.
+  HomeCA's own Renew button is hidden for them. `X-Forwarded-For` is deliberately ignored.
 - Unsupported: DNS-01, `keyChange`, external account binding, IP identifiers.
 
 NPM's LE_SERVER support was verified against its source (`backend/lib/config.js`, `develop` branch);
@@ -115,7 +115,7 @@ Generate a request on the device, then **+ New → Sign CSR**:
       -keyout router.key -out router.csr -subj "/CN=router.home.arpa" \
       -addext "subjectAltName=DNS:router.home.arpa,IP:192.168.1.1"
 
-The CSR's signature is checked, its public key and subject are kept, and homeca applies its own leaf
+The CSR's signature is checked, its public key and subject are kept, and HomeCA applies its own leaf
 profile. Extensions requested in the CSR other than SAN are ignored; SANs can be overridden in the UI.
 
 ## Revocation and CRLs
@@ -124,14 +124,14 @@ Revoking a certificate re-signs its issuer's CRL (30-day lifetime). A root has n
 cannot be revoked. A daily job re-signs CRLs that have under 15 days left, so no login is needed to keep
 them valid. ACME clients revoke through the protocol (`certbot revoke`).
 
-Renewing a leaf in the UI issues a new certificate (new key if homeca holds the key, otherwise the
+Renewing a leaf in the UI issues a new certificate (new key if HomeCA holds the key, otherwise the
 device's existing public key) and marks the old one "superseded" without revoking it. Revoke it yourself
 if the old key may be compromised. Intermediates and roots cannot be renewed; create a new one.
 
 ## Security model
 
 - **Two secrets.** The admin **password** only logs you in (scrypt-hashed). The **master key** file
-  encrypts every private key (passphrase-encrypted PKCS#8) and lets homeca sign without anyone logged in,
+  encrypts every private key (passphrase-encrypted PKCS#8) and lets HomeCA sign without anyone logged in,
   which ACME and the daily CRL job need. A stolen backup or volume is useless without the master key;
   anyone who can read both the running container's secret and its data can use the CA.
 - Losing the master key means losing every stored private key. Keep a copy somewhere safe, separate from backups.

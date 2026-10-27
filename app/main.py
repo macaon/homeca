@@ -176,10 +176,19 @@ def _oidc_login(c, ident):
     return user
 
 
+def _external_url(request: Request, path: str) -> str:
+    """Like request.url_for, but trusts Caddy's forwarded scheme/host for just this one URL - unlike HomeCaddy,
+    homeca can't turn on uvicorn's proxy_headers globally: the ACME client allowlist needs the real peer IP,
+    not whatever a spoofable X-Forwarded-For claims, so that stays proxy_headers=False everywhere else."""
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+    return f"{scheme}://{host}{path}"
+
+
 if oauth:
     @app.get("/login/oidc")
     async def login_oidc(request: Request):
-        return await oauth.oidc.authorize_redirect(request, str(request.url_for("oidc_callback")))
+        return await oauth.oidc.authorize_redirect(request, _external_url(request, "/auth/callback"))
 
     @app.get("/auth/callback", name="oidc_callback")
     async def oidc_callback(request: Request):

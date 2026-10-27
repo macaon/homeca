@@ -29,6 +29,17 @@ function dropdown(btnId, panelId) {
 }
 dropdown("account-btn", "account-panel");
 
+// ---------- theme ----------
+const effectiveTheme = () => document.documentElement.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+const syncThemeBtn = () => ($("theme-btn").textContent = effectiveTheme() === "dark" ? "Light mode" : "Dark mode");
+$("theme-btn").onclick = () => {
+  const next = effectiveTheme() === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try { localStorage.setItem("theme", next); } catch { /* private mode: not remembered */ }
+  syncThemeBtn();
+};
+syncThemeBtn();
+
 // ---------- auth ----------
 async function init() {
   const s = await api("/api/state");

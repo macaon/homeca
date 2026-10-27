@@ -1,5 +1,6 @@
 services:
   homeca:
+    image: docker.home.arpa/homeca:latest   # `docker compose pull` to deploy without building
     build:
       context: .
       dockerfile: Containerfile

@@ -49,6 +49,18 @@ expired, sorted by urgency. This is the list to act on.
 **Certificates** — the full hierarchy as a tree: roots at the top level, their
 intermediates indented beneath, leaves beneath those. Click any entry to open it.
 
+### Logging in, and the account menu
+
+Local username/password, set up on first visit (12+ characters). If SSO is configured, a
+**Log in with SSO** link appears below the password form — it authenticates against your
+identity provider and maps back to the one local admin account by username or email. SSO is
+an alternative, not a replacement: local password login always stays available, so this
+never becomes a single point of failure if the identity provider itself is unreachable.
+
+**Password**, **Log out** and **Dark mode / Light mode** live under **Account**, top right,
+rather than as loose buttons. The theme choice is remembered per browser (`localStorage`),
+independent of the OS setting.
+
 ### Reading the badges
 
 | Badge | Meaning |
@@ -279,9 +291,9 @@ client holds it) and no **Renew** button.
 done. If not, each entry is a click away from **Renew** (or a certbot run on the client, for
 ACME ones).
 
-**Changing your password.** **Password** in the header. Needs the current one, the new one
-must be 12+ characters. All other sessions are signed out. Stored private keys are untouched
-— they are encrypted with the master key, not your password.
+**Changing your password.** **Account → Password**. Needs the current one, the new one must
+be 12+ characters. All other sessions are signed out. Stored private keys are untouched —
+they are encrypted with the master key, not your password.
 
 <p class="callout danger">The master key file is separate from your password and cannot be rotated in place. Lose it and every stored private key is unrecoverable. Keep a copy somewhere other than your backups — a backup without the key is useless, and the key without a backup is useless.</p>
 

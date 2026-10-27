@@ -13,12 +13,29 @@ async function api(path, method = "GET", body) {
   return data;
 }
 
+// ---------- chrome: account menu (portable as-is to other Home* apps) ----------
+function dropdown(btnId, panelId) {
+  const btn = $(btnId), panel = $(panelId);
+  const close = () => { panel.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); };
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    const opening = !panel.classList.contains("open");
+    panel.classList.toggle("open", opening);
+    btn.setAttribute("aria-expanded", String(opening));
+  };
+  panel.addEventListener("click", (e) => e.target.tagName === "A" || e.target.tagName === "BUTTON" ? close() : null);
+  document.addEventListener("click", (e) => { if (panel.classList.contains("open") && !panel.contains(e.target) && e.target !== btn) close(); });
+  document.addEventListener("keydown", (e) => e.key === "Escape" && close());
+}
+dropdown("account-btn", "account-panel");
+
 // ---------- auth ----------
 async function init() {
   const s = await api("/api/state");
   $("app").hidden = !s.logged_in;
   $("auth").hidden = s.logged_in;
-  if (s.logged_in) return load();
+  $("sso-row").hidden = !s.sso;
+  if (s.logged_in) { $("account-btn").textContent = `${s.user} ▾`; return load(); }
   $("pw2-row").hidden = !s.setup_needed;
   $("pw2").required = s.setup_needed;
   $("auth-btn").textContent = s.setup_needed ? "Create admin user" : "Log in";

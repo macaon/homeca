@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography import x509
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import HTTPException
 
 from . import pki
@@ -65,6 +66,12 @@ def master() -> bytes:
                 raise RuntimeError("master key does not match this database")
         _master = pw.encode()
     return _master
+
+
+def derived_secret(info: bytes) -> bytes:
+    """A stable secret derived from the master key, for things that need their own key (session signing) but
+    shouldn't need their own secret file."""
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=info).derive(master())
 
 
 # ---------- certificate rows ----------

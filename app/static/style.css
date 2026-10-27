@@ -104,3 +104,13 @@ td:first-child { color: var(--muted); width: 38%; padding-right: 10px; }
 #fields[data-kind="root"] .row label[data-for~="root"], #fields[data-kind="intermediate"] .row label[data-for~="intermediate"],
 #fields[data-kind="leaf"] .row label[data-for~="leaf"] { display: block !important; }
 @media (max-width: 520px) { .node .sub { display: none; } .row { flex-direction: column; gap: 0; } .kv { grid-template-columns: 1fr; } }
+
+/* ---- portable chrome: account menu. Same markup/classes as HomeCaddy's #account-btn + #account-panel,
+   wired with dropdown() in app.js. (No hamburger here: homeca's header has no nav to collapse.) ---- */
+header { position: relative; }
+.menu-panel { display: none; position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 5; min-width: 180px;
+  flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 6px; }
+.menu-panel.open { display: flex; }
+.menu-panel button { display: block; width: 100%; border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; }
+.menu-panel button:hover { background: var(--hover); }

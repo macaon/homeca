@@ -19,6 +19,8 @@
     <button class="primary" id="auth-btn"></button>
     <p class="error" id="auth-err" role="alert"></p>
   </form>
+  <p id="sso-row" hidden style="max-width:380px;margin:12px auto 0;text-align:center">
+    <a href="/login/oidc"><button type="button">Log in with SSO</button></a></p>
 </main>
 
 <div id="app" hidden>
@@ -26,8 +28,11 @@
     <div class="logo">HomeCA</div>
     <span class="spacer"></span>
     <button class="primary" id="new-btn">+ New</button>
-    <button id="pwd-btn">Password</button>
-    <button id="logout-btn">Log out</button>
+    <button id="account-btn" aria-haspopup="true" aria-expanded="false">Account ▾</button>
+    <div id="account-panel" class="menu-panel">
+      <button id="pwd-btn">Password</button>
+      <button id="logout-btn">Log out</button>
+    </div>
   </header>
 
   <section class="stats" id="stats"></section>

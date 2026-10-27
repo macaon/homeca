@@ -7,12 +7,14 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from authlib.integrations.starlette_client import OAuth
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.middleware.sessions import SessionMiddleware
 
 from . import acme, pki
 from .ca import (cert_of, chain, hash_pw, iso, key_of, now, parse, revoke_cert, row, set_setting, setting,
@@ -22,6 +24,22 @@ from .store import db
 
 SECURE = os.environ.get("HOMECA_SECURE_COOKIE") == "1"
 STATIC = Path(__file__).parent / "static"
+
+# ---------- OIDC (optional: active only once all four are set) ----------
+OIDC_ISSUER = os.environ.get("HOMECA_OIDC_ISSUER")
+OIDC_CLIENT_ID = os.environ.get("HOMECA_OIDC_CLIENT_ID")
+OIDC_CLIENT_SECRET_FILE = os.environ.get("HOMECA_OIDC_CLIENT_SECRET_FILE")
+OIDC_ADMIN_MATCH = os.environ.get("HOMECA_OIDC_ADMIN_MATCH")
+OIDC_CA_FILE = os.environ.get("HOMECA_OIDC_CA_FILE")  # only needed if the IdP's cert is from a private CA
+oauth = None
+if OIDC_ISSUER and OIDC_CLIENT_ID and OIDC_CLIENT_SECRET_FILE and OIDC_ADMIN_MATCH:
+    oauth = OAuth()
+    client_kwargs = {"scope": "openid profile email"}
+    if OIDC_CA_FILE:
+        client_kwargs["verify"] = OIDC_CA_FILE
+    oauth.register("oidc", server_metadata_url=OIDC_ISSUER.rstrip("/") + "/.well-known/openid-configuration",
+                   client_id=OIDC_CLIENT_ID, client_secret=Path(OIDC_CLIENT_SECRET_FILE).read_text().strip(),
+                   client_kwargs=client_kwargs)
 
 
 async def _daily():
@@ -52,8 +70,12 @@ async def lifespan(_):
 app = FastAPI(title="homeca", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.include_router(acme.router)
 app.add_exception_handler(acme.AcmeError, acme.problem)
+ca.master()  # load the master key now (fails fast), never in the middle of a database transaction
 # ponytail: in-memory sessions {token: username}; restart = re-login.
 SESSIONS: dict[str, str] = {}
+if oauth:  # only needed to carry the OIDC state/nonce across the redirect round-trip
+    app.add_middleware(SessionMiddleware, secret_key=ca.derived_secret(b"homeca oidc session v1"),
+                       session_cookie="homeca_oidc", same_site="lax", https_only=SECURE, max_age=600)
 
 
 # ---------- auth ----------
@@ -100,7 +122,7 @@ def _check_admin(c, user, pw):
 def state(homeca: str | None = Cookie(None)):
     with db() as c:
         return {"setup_needed": setting(c, "admin_hash") is None, "logged_in": homeca in SESSIONS,
-                "user": SESSIONS.get(homeca)}
+                "user": SESSIONS.get(homeca), "sso": oauth is not None}
 
 
 @app.post("/api/setup")
@@ -141,6 +163,33 @@ def logout(r: Response, homeca: str | None = Cookie(None)):
     SESSIONS.pop(homeca, None)
     r.delete_cookie("homeca")
     return {}
+
+
+# ---------- OIDC login (an alternative front door; everything past this point is still the same admin session) ----------
+def _oidc_login(c, ident):
+    """ident: the Keycloak preferred_username or email from the ID token. Returns the admin username to log in as."""
+    user = setting(c, "admin_user")
+    if user is None:
+        raise HTTPException(409, "finish local setup first")
+    if not ident or ident.lower() != OIDC_ADMIN_MATCH.lower():
+        raise HTTPException(403, "this account is not the homeca admin")
+    return user
+
+
+if oauth:
+    @app.get("/login/oidc")
+    async def login_oidc(request: Request):
+        return await oauth.oidc.authorize_redirect(request, str(request.url_for("oidc_callback")))
+
+    @app.get("/auth/callback", name="oidc_callback")
+    async def oidc_callback(request: Request):
+        token = await oauth.oidc.authorize_access_token(request)
+        info = token.get("userinfo") or {}
+        resp = RedirectResponse("/")
+        with db() as c:
+            user = _oidc_login(c, info.get("preferred_username") or info.get("email") or "")
+        _login(resp, user)
+        return resp
 
 
 # ---------- issuing ----------

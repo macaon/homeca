@@ -16,7 +16,8 @@ async function api(path, method = "GET", body) {
 // ---------- shared HomeUI chrome ----------
 HomeUI.dropdown($("account-btn"), $("account-panel"));
 $("settings-btn").innerHTML = HomeUI.icon("settings");
-HomeUI.tabs($("settings-tabs"));
+const settingsTabs = HomeUI.tabs($("settings-tabs"));
+$("oidc-open-trust").onclick=()=>settingsTabs.select("trust-tab");
 let defaultTheme = "auto";
 function toast(message, error=false) { HomeUI.toast($("toast"), message, {tone:error?"error":"info"}); }
 function renderOIDC(settings) {

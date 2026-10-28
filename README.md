@@ -64,7 +64,7 @@ The settings cog sits immediately left of the account name. The account menu con
 Under **Server settings**:
 
 - **User Interface:** choose Auto, Light or Dark as the server default. Auto is the initial value. The dashboard and login page both follow this setting; there is no separate account-menu appearance override.
-- **Trust:** upload multiple public PEM/DER certificates or a PEM bundle for your identity provider. System roots and `HOMECA_OIDC_CA_FILE` remain trusted. Private keys are rejected. Trust uploads are separate from your issuing CA hierarchy.
+- **Trust:** upload multiple public PEM/DER certificates or a PEM bundle for your identity provider. System roots and `HOMECA_OIDC_CA_FILE` remain trusted. Private keys are rejected. Trust uploads are separate from your issuing CA hierarchy. The OAuth / OIDC tab links to Trust rather than having its own certificate field.
 - **OAuth / OIDC:** enable SSO, paste an HTTPS issuer or full discovery URL, enter a client ID/secret and explicitly list the administrator usernames or verified emails allowed to sign in. The callback remains `/auth/callback`, shown with the external origin in the settings form. Saving does not require a restart. Saved fields remain populated; a masked secret placeholder means leave blank to retain it.
 
 Existing `HOMECA_OIDC_ISSUER`, `HOMECA_OIDC_CLIENT_ID`, `HOMECA_OIDC_CLIENT_SECRET_FILE`, `HOMECA_OIDC_ADMIN_MATCH` and `HOMECA_OIDC_CA_FILE` deployments continue to work. On the first save, the UI configuration takes precedence and the existing secret is encrypted into the database. Back up the database and master key as before. Local admin credentials, issued certificates, ACME configuration and CA keys are not migrated.

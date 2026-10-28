@@ -5,33 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HomeCA</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M16 6l8 3v6c0 5-3.5 8.5-8 11-4.500-2.500-8-6-8-11V9z' fill='none' stroke='white' stroke-width='2.200' stroke-linejoin='round'/%3E%3Cpath d='M12.500 16l2.500 2.500 4.500-5' fill='none' stroke='white' stroke-width='2.200' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/ui/home-ui.css">
 <link rel="stylesheet" href="/static/style.css">
-<script>try { var t = localStorage.getItem("theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+
 </head>
 <body>
 
 <main id="auth" hidden>
-  <form class="card auth" id="auth-form">
-    <div class="logo">HomeCA</div>
+  <form class="hui-card hui-auth" id="auth-form">
+    <div class="hui-logo">HomeCA</div>
     <p class="muted" id="auth-hint"></p>
     <label>Username <input id="user" autocomplete="username" required></label>
     <label>Password <input type="password" id="pw" autocomplete="current-password" required></label>
     <label id="pw2-row" hidden>Repeat password <input type="password" id="pw2" autocomplete="new-password"></label>
-    <button class="primary" id="auth-btn"></button>
+    <div class="hui-login-actions">
+      <button class="primary" id="auth-btn"></button>
+      <a class="hui-button" id="sso-row" href="/login/oidc" hidden>Log in with SSO</a>
+    </div>
     <p class="error" id="auth-err" role="alert"></p>
   </form>
-  <p id="sso-row" hidden style="max-width:380px;margin:12px auto 0;text-align:center">
-    <a href="/login/oidc"><button type="button">Log in with SSO</button></a></p>
 </main>
 
-<div id="app" hidden>
-  <header>
-    <div class="logo">HomeCA</div>
+<div id="app" class="hui-app" hidden>
+  <header class="hui-header">
+    <div class="hui-logo">HomeCA</div>
     <span class="spacer"></span>
-    <button class="primary" id="new-btn">+ New</button>
+    <button id="settings-btn" class="hui-icon-button" aria-label="Server settings" title="Server settings"></button>
     <button id="account-btn" aria-haspopup="true" aria-expanded="false">Account ▾</button>
-    <div id="account-panel" class="menu-panel">
+    <div id="account-panel" class="hui-menu">
       <button id="theme-btn"></button>
+      <button id="theme-reset">Use server appearance</button>
       <button id="pwd-btn">Password</button>
       <button id="logout-btn">Log out</button>
     </div>
@@ -39,24 +42,40 @@
 
   <section class="stats" id="stats"></section>
 
-  <section class="card" id="acme-card">
+  <section class="hui-card" id="acme-card">
     <h2>ACME</h2>
     <div id="acme"></div>
   </section>
 
-  <section class="card" id="attention-card" hidden>
+  <section class="hui-card" id="attention-card" hidden>
     <h2>Needs attention</h2>
     <ul class="list" id="attention"></ul>
   </section>
 
-  <section class="card">
-    <h2>Certificates</h2>
+  <section class="hui-card">
+    <div class="section-head"><h2>Certificates</h2><button class="primary" id="new-btn">+ New certificate</button></div>
     <div id="tree"></div>
     <p class="muted" id="empty" hidden>Nothing here yet. Create a root CA with <b>+ New</b> to get started.</p>
   </section>
 </div>
 
 <dialog id="detail"></dialog>
+
+<dialog id="settings-dialog" aria-labelledby="settings-title">
+  <div class="hui-dialog-head"><h2 id="settings-title">Server settings</h2><button type="button" class="hui-icon-button" data-close aria-label="Close settings">✕</button></div>
+  <div class="hui-tabs" id="settings-tabs"><button id="interface-tab" type="button" aria-controls="interface-panel">User Interface</button><button id="trust-tab" type="button" aria-controls="settings-trust">Trust</button><button id="oidc-tab" type="button" aria-controls="settings-oidc">OAuth / OIDC</button></div>
+  <section id="interface-panel">
+    <form id="interface-form">
+      <label>Default appearance<select id="default-theme"><option value="auto">Auto · follow system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+      <p class="hui-small">Applies to the login page and accounts using the server appearance. Auto is the default for new installations.</p>
+      <p class="error" id="interface-error" role="alert"></p>
+      <div class="hui-dialog-foot"><button type="button" data-close>Close</button><button class="primary">Save interface settings</button></div>
+    </form>
+  </section>
+<section id="settings-trust" role="tabpanel" aria-labelledby="settings-trust-tab" hidden><p class="hui-small">Trusted certificates apply to OIDC login. Public certificate authorities remain trusted too. Upload your private root CA once to trust your identity provider.</p><div id="trust-list"></div><form id="trust-form"><label>Certificate name<input id="trust-name" required maxlength="80" placeholder="Homelab root CA"></label><label>Public certificates<input id="trust-files" type="file" accept=".pem,.crt,.cer,.der" multiple required></label><p class="hui-small">PEM or DER files. You can select multiple files or upload a PEM bundle. Private keys are never accepted.</p><p class="hui-error" id="trust-error" role="alert"></p><div class="hui-dialog-foot"><button class="hui-primary">Upload certificates</button></div></form></section>
+<section id="settings-oidc" role="tabpanel" aria-labelledby="settings-oidc-tab" hidden><form id="oidc-form"><label class="hui-inline"><input id="oidc-enabled" type="checkbox">Enable OpenID Connect login</label><p class="hui-small">Local username/password login remains available. Only explicitly allowed identities can sign in. Each allowed identity acts as the existing CA administrator, with full access to certificates and private keys.</p><label>Issuer or discovery URL<input id="oidc-issuer" type="url" placeholder="https://identity.example.net/realms/example/.well-known/openid-configuration"></label><p class="hui-small">Paste the issuer address or its full .well-known/openid-configuration link. HomeCA discovers the login endpoints automatically; client ID and secret are still required.</p><label>Client ID<input id="oidc-client"></label><label>Client secret <small id="oidc-secret-hint"></small><input id="oidc-secret" type="password" autocomplete="new-password"></label><label>Allowed usernames or emails <small>required, comma separated; usernames or verified email addresses</small><input id="oidc-allowed"></label><p class="hui-small">Register this redirect URI with your provider: <code id="oidc-callback"></code></p><p class="hui-error" id="oidc-error" role="alert"></p><div class="hui-dialog-foot"><button class="hui-primary">Save OAuth settings</button></div></form></section>
+
+</dialog>
 
 <dialog id="pwdlg">
   <form id="pw-form" method="dialog">
@@ -118,6 +137,9 @@
   </form>
 </dialog>
 
+<dialog id="confirm"><form method="dialog"><div class="hui-dialog-head"><h2 data-confirm-title></h2></div><p data-confirm-message></p><div class="hui-dialog-foot"><button value="cancel">Cancel</button><button value="confirm" data-confirm-accept class="hui-danger">Remove</button></div></form></dialog>
+<div class="hui-toast" id="toast" hidden role="status"></div>
+<script src="/static/ui/home-ui.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

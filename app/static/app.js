@@ -13,47 +13,92 @@ async function api(path, method = "GET", body) {
   return data;
 }
 
-// ---------- chrome: account menu (portable as-is to other Home* apps) ----------
-function dropdown(btnId, panelId) {
-  const btn = $(btnId), panel = $(panelId);
-  const close = () => { panel.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); };
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    const opening = !panel.classList.contains("open");
-    panel.classList.toggle("open", opening);
-    btn.setAttribute("aria-expanded", String(opening));
-  };
-  panel.addEventListener("click", (e) => e.target.tagName === "A" || e.target.tagName === "BUTTON" ? close() : null);
-  document.addEventListener("click", (e) => { if (panel.classList.contains("open") && !panel.contains(e.target) && e.target !== btn) close(); });
-  document.addEventListener("keydown", (e) => e.key === "Escape" && close());
+// ---------- shared HomeUI chrome ----------
+HomeUI.dropdown($("account-btn"), $("account-panel"));
+$("settings-btn").innerHTML = HomeUI.icon("settings");
+HomeUI.tabs($("settings-tabs"));
+const appearance = HomeUI.themeController({prefix: "homeca", defaultTheme: document.documentElement.dataset.theme || "auto"});
+let currentUser = null, defaultTheme = "auto";
+function syncThemeBtn() { $("theme-btn").textContent = `Appearance: ${appearance.mode}`; }
+$("theme-btn").onclick = () => { appearance.cycle(); syncThemeBtn(); };
+$("theme-reset").onclick = () => { appearance.useDefault(); syncThemeBtn(); };
+function toast(message, error=false) { HomeUI.toast($("toast"), message, {tone:error?"error":"info"}); }
+function renderOIDC(settings) {
+  $("oidc-enabled").checked=settings.oidc.enabled; $("oidc-issuer").value=settings.oidc.issuer;
+  $("oidc-client").value=settings.oidc.client_id; $("oidc-allowed").value=settings.oidc.allowed_users;
+  $("oidc-secret").value=""; $("oidc-secret").placeholder=settings.oidc_secret_configured?"••••••••••••":"";
+  $("oidc-secret-hint").textContent=settings.oidc_secret_configured?"Saved; leave blank to keep the current secret":"Required when enabling SSO";
+  $("oidc-callback").textContent=settings.callback_url; $("oidc-error").textContent="";
 }
-dropdown("account-btn", "account-panel");
-
-// ---------- theme ----------
-const effectiveTheme = () => document.documentElement.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-const syncThemeBtn = () => ($("theme-btn").textContent = effectiveTheme() === "dark" ? "Light mode" : "Dark mode");
-$("theme-btn").onclick = () => {
-  const next = effectiveTheme() === "dark" ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme", next);
-  try { localStorage.setItem("theme", next); } catch { /* private mode: not remembered */ }
-  syncThemeBtn();
+$("settings-btn").onclick = async () => {
+  $("interface-error").textContent = "";
+  try {
+    const settings = await api("/api/settings");
+    $("default-theme").value = settings.ui.theme; renderOIDC(settings);
+    renderTrust(await api("/api/settings/trust"));
+    $("settings-dialog").showModal();
+  } catch (error) { toast(error.message, true); }
 };
-syncThemeBtn();
+$("oidc-form").onsubmit=async event=>{
+  event.preventDefault(); const button=event.submitter; button.disabled=true;
+  try {
+    const result=await api("/api/settings/oidc","PUT",{enabled:$("oidc-enabled").checked,issuer:$("oidc-issuer").value,
+      client_id:$("oidc-client").value,client_secret:$("oidc-secret").value,allowed_users:$("oidc-allowed").value});
+    renderOIDC(result.settings);toast("OAuth settings saved. Local login remains available.");
+  } catch(error) { $("oidc-error").textContent=error.message; } finally { button.disabled=false; }
+};
+function renderTrust(certificates){
+  $("trust-list").innerHTML=certificates.length?certificates.map(cert=>`<div class="trust-row"><div><b>${esc(cert.name)}</b><small>${esc(cert.subject)} · expires ${esc(fmtDate(cert.expires))}</small><code>${esc(cert.fingerprint)}</code></div><button type="button" class="danger" data-remove-cert="${cert.fingerprint}">Remove</button></div>`).join(""):"<p class='hui-small'>No additional certificates uploaded. System trust and the deployment CA file remain active.</p>";
+  document.querySelectorAll('[data-remove-cert]').forEach(button=>button.onclick=async()=>{
+    const accepted=await HomeUI.confirmAction($("confirm"),{title:"Remove trusted certificate",message:"SSO may fail if its provider relies on this certificate.",confirmLabel:"Remove"});
+    if(!accepted)return;
+    try{await api('/api/settings/trust/'+button.dataset.removeCert,'DELETE');renderTrust(await api('/api/settings/trust'));}catch(error){toast(error.message,true);}
+  });
+}
+$("trust-form").onsubmit=async event=>{
+  event.preventDefault();const button=event.submitter;button.disabled=true;$("trust-error").textContent="";
+  try{
+    const files=[...$("trust-files").files]; if(files.length>32)throw new Error("Choose up to 32 files.");
+    let added=0;
+    for(const file of files){if(file.size>350000)throw new Error("Certificate files must be smaller than 350 KB.");
+      const bytes=new Uint8Array(await file.arrayBuffer());let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);
+      const result=await api('/api/settings/trust','POST',{name:$("trust-name").value,certificate:btoa(binary)});
+      added+=result.added;renderTrust(result.certificates);
+    }
+    $("trust-form").reset();toast(`${added} certificate(s) added`);
+  }catch(error){$("trust-error").textContent=error.message;}finally{button.disabled=false;}
+};
+$("interface-form").onsubmit = async (event) => {
+  event.preventDefault();
+  try {
+    const saved = await api("/api/settings/interface", "PUT", {theme: $("default-theme").value});
+    defaultTheme = saved.theme;
+    appearance.setContext(currentUser, defaultTheme); syncThemeBtn();
+    toast("Interface settings saved");
+  } catch (error) { $("interface-error").textContent = error.message; }
+};
 
 // ---------- auth ----------
 async function init() {
   const s = await api("/api/state");
+  const failure=new URLSearchParams(location.search).get("sso_error");
+  if(failure){$("auth-err").textContent=failure==="tls"?"The identity provider certificate is not trusted. Log in locally and upload its CA under Server settings → Trust.":"SSO login could not be completed. Check the provider settings and allowed administrator identities.";history.replaceState(null,"",location.pathname);}
   $("app").hidden = !s.logged_in;
   $("auth").hidden = s.logged_in;
-  $("sso-row").hidden = !s.sso;
+  $("sso-row").hidden = !s.sso || s.setup_needed;
+  currentUser = s.logged_in ? s.user : null;
+  defaultTheme = s.ui.theme;
+  appearance.setContext(currentUser, defaultTheme); syncThemeBtn();
+  if (!s.logged_in) document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   if (s.logged_in) { $("account-btn").textContent = `${s.user} ▾`; return load(); }
   $("pw2-row").hidden = !s.setup_needed;
   $("pw2").required = s.setup_needed;
   $("auth-btn").textContent = s.setup_needed ? "Create admin user" : "Log in";
   $("auth-hint").textContent = s.setup_needed
-    ? "First run: choose an admin username and a password (12+ characters). Private keys are encrypted separately, with the master key file."
+    ? "Create the local administrator account. Use a password of at least 12 characters."
     : "Log in to manage your CA.";
   $("pw").autocomplete = s.setup_needed ? "new-password" : "current-password";
+  $("pw").minLength = s.setup_needed ? 12 : 1;
   $("user").focus();
   window.setupNeeded = s.setup_needed;
 }
@@ -195,7 +240,7 @@ let kind = "leaf";
 function setKind(k) {
   kind = k;
   $("fields").dataset.kind = k;
-  document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.kind === k));
+  document.querySelectorAll("#tabs button").forEach((b) => { b.setAttribute("aria-selected", b.dataset.kind === k); b.tabIndex=b.dataset.kind===k?0:-1; });
   $("f-days").value = DAYS[k];
   $("f-cn").required = k !== "csr";
   const cas = certs.filter((c) => c.kind !== "leaf" && c.status === "valid" || c.kind !== "leaf" && c.status === "expiring");
@@ -217,6 +262,13 @@ function warnDays() {
 }
 $("f-days").oninput = $("f-usage").onchange = warnDays;
 document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => setKind(b.dataset.kind)));
+$("tabs").addEventListener("keydown", event => {
+  const buttons=[...$("tabs").querySelectorAll("button")], index=buttons.indexOf(document.activeElement);
+  if(index<0)return;let next;
+  if(event.key==="ArrowRight")next=(index+1)%buttons.length;else if(event.key==="ArrowLeft")next=(index+buttons.length-1)%buttons.length;
+  else if(event.key==="Home")next=0;else if(event.key==="End")next=buttons.length-1;else return;
+  event.preventDefault();setKind(buttons[next].dataset.kind);buttons[next].focus();
+});
 $("new-btn").onclick = () => { $("new-err").textContent = ""; setKind(!certs.length ? "root" : certs.some((c) => c.kind === "intermediate") ? "leaf" : "intermediate"); $("new").showModal(); };
 
 $("new-form").onsubmit = async (e) => {

@@ -17,7 +17,8 @@ extensions cannot be forgotten.
 - Downloads: certificate, full chain, DER, private key, PKCS#12
 - ECDSA P-256 / P-384 and RSA 2048 / 3072 / 4096 keys
 - Username/password login; private keys are encrypted at rest with a separate master key
-- Vanilla HTML/JS/CSS frontend with no build step and no CDN; light and dark themes
+- Versioned HomeUI frontend with no build step or CDN; Auto, Light and Dark appearance
+- Tabbed server settings for interface defaults, private CA trust and optional OIDC login
 
 ## Quick start (Docker or Podman)
 
@@ -53,6 +54,22 @@ Environment variables:
 
 Put the UI behind your reverse proxy for TLS if you like, but keep `/crl/*` and `/ca/*` reachable over
 plain HTTP at `HOMECA_PUBLIC_URL`.
+
+## Interface and single sign-on
+
+HomeCA vendors **HomeUI 0.1.0** from HomeTemplate under `app/static/ui/`; the adopted [design guideline](docs/design-guidelines.md) and `HOMEUI_VERSION` record the baseline. App-specific certificate styles remain separate.
+
+The settings cog sits immediately left of the account name. The account menu contains personal appearance, reset to the server appearance, password and logout. With one dashboard there is no navigation hamburger; certificate creation lives beside the certificate list.
+
+Under **Server settings**:
+
+- **User Interface:** choose Auto, Light or Dark as the server default. Auto is the initial value. The login page follows this default; a signed-in personal choice is scoped to that account and browser.
+- **Trust:** upload multiple public PEM/DER certificates or a PEM bundle for your identity provider. System roots and `HOMECA_OIDC_CA_FILE` remain trusted. Private keys are rejected. Trust uploads are separate from your issuing CA hierarchy.
+- **OAuth / OIDC:** enable SSO, paste an HTTPS issuer or full discovery URL, enter a client ID/secret and explicitly list the administrator usernames or verified emails allowed to sign in. The callback remains `/auth/callback`, shown with the external origin in the settings form. Saving does not require a restart. Saved fields remain populated; a masked secret placeholder means leave blank to retain it.
+
+Existing `HOMECA_OIDC_ISSUER`, `HOMECA_OIDC_CLIENT_ID`, `HOMECA_OIDC_CLIENT_SECRET_FILE`, `HOMECA_OIDC_ADMIN_MATCH` and `HOMECA_OIDC_CA_FILE` deployments continue to work. On the first save, the UI configuration takes precedence and the existing secret is encrypted into the database. Back up the database and master key as before. Local admin credentials, issued certificates, ACME configuration and CA keys are not migrated.
+
+If SSO fails, the login page shows a safe error. Log in locally to check provider settings or upload its root under Trust. Keep a working local password for recovery.
 
 ## Certificate profiles
 
@@ -148,8 +165,8 @@ if the old key may be compromised. Intermediates and roots cannot be renewed; cr
 - A logged-in session can download private keys. Treat access to the UI as access to the CA.
 - ACME needs three things to issue: the client's address in `HOMECA_ACME_CLIENTS`, proof of control of the
   name over HTTP-01, and the name being inside the chosen CA's name constraints.
-- There is deliberately **no OIDC/Keycloak login**. If Keycloak's own certificate comes from this CA,
-  an expiry would lock you out of the tool needed to fix it.
+- Optional **OIDC/Keycloak login** is configured under **Server settings → OAuth / OIDC**. Local login stays available so an identity-provider outage or expired certificate cannot prevent CA recovery.
+- Only explicitly allowed usernames or verified email addresses may use SSO. They act as the existing CA administrator and can download private keys. This migration does not introduce ordinary-user roles. Saved provider secrets are encrypted using a separate key derived from the existing master key.
 - Public unauthenticated endpoints: `/crl/<id>.crl`, `/ca/<id>.crt`, `/ca/<id>.pem`.
 
 ### Upgrading from the passphrase version

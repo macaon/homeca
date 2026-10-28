@@ -7,11 +7,10 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from authlib.integrations.starlette_client import OAuth
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.sessions import SessionMiddleware
@@ -19,27 +18,18 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import acme, pki
 from .ca import (cert_of, chain, hash_pw, iso, key_of, now, parse, revoke_cert, row, set_setting, setting,
                  status_of, store_cert, urls, write_crl)
-from . import ca
+from . import ca, preferences
 from .store import db
 
 SECURE = os.environ.get("HOMECA_SECURE_COOKIE") == "1"
 STATIC = Path(__file__).parent / "static"
 
-# ---------- OIDC (optional: active only once all four are set) ----------
+# ---------- legacy deployment defaults; UI settings take precedence ----------
 OIDC_ISSUER = os.environ.get("HOMECA_OIDC_ISSUER")
 OIDC_CLIENT_ID = os.environ.get("HOMECA_OIDC_CLIENT_ID")
 OIDC_CLIENT_SECRET_FILE = os.environ.get("HOMECA_OIDC_CLIENT_SECRET_FILE")
 OIDC_ADMIN_MATCH = os.environ.get("HOMECA_OIDC_ADMIN_MATCH")
 OIDC_CA_FILE = os.environ.get("HOMECA_OIDC_CA_FILE")  # only needed if the IdP's cert is from a private CA
-oauth = None
-if OIDC_ISSUER and OIDC_CLIENT_ID and OIDC_CLIENT_SECRET_FILE and OIDC_ADMIN_MATCH:
-    oauth = OAuth()
-    client_kwargs = {"scope": "openid profile email"}
-    if OIDC_CA_FILE:
-        client_kwargs["verify"] = OIDC_CA_FILE
-    oauth.register("oidc", server_metadata_url=OIDC_ISSUER.rstrip("/") + "/.well-known/openid-configuration",
-                   client_id=OIDC_CLIENT_ID, client_secret=Path(OIDC_CLIENT_SECRET_FILE).read_text().strip(),
-                   client_kwargs=client_kwargs)
 
 
 async def _daily():
@@ -73,9 +63,9 @@ app.add_exception_handler(acme.AcmeError, acme.problem)
 ca.master()  # load the master key now (fails fast), never in the middle of a database transaction
 # ponytail: in-memory sessions {token: username}; restart = re-login.
 SESSIONS: dict[str, str] = {}
-if oauth:  # only needed to carry the OIDC state/nonce across the redirect round-trip
-    app.add_middleware(SessionMiddleware, secret_key=ca.derived_secret(b"homeca oidc session v1"),
-                       session_cookie="homeca_oidc", same_site="lax", https_only=SECURE, max_age=600)
+# Always installed: OIDC can now be configured without restarting the server.
+app.add_middleware(SessionMiddleware, secret_key=ca.derived_secret(b"homeca oidc session v1"),
+                   session_cookie="homeca_oidc", same_site="lax", https_only=SECURE, max_age=600)
 
 
 # ---------- auth ----------
@@ -122,7 +112,8 @@ def _check_admin(c, user, pw):
 def state(homeca: str | None = Cookie(None)):
     with db() as c:
         return {"setup_needed": setting(c, "admin_hash") is None, "logged_in": homeca in SESSIONS,
-                "user": SESSIONS.get(homeca), "sso": oauth is not None}
+                "user": SESSIONS.get(homeca), "sso": preferences.oidc_options()["enabled"],
+                "ui": {"theme": setting(c, "ui_theme") or "auto"}}
 
 
 @app.post("/api/setup")
@@ -185,20 +176,129 @@ def _external_url(request: Request, path: str) -> str:
     return f"{scheme}://{host}{path}"
 
 
-if oauth:
-    @app.get("/login/oidc")
-    async def login_oidc(request: Request):
-        return await oauth.oidc.authorize_redirect(request, _external_url(request, "/auth/callback"))
+def oidc_failure(error):
+    code = "tls" if "CERTIFICATE_VERIFY_FAILED" in str(error) else "failed"
+    return RedirectResponse("/?sso_error=" + code)
 
-    @app.get("/auth/callback", name="oidc_callback")
-    async def oidc_callback(request: Request):
-        token = await oauth.oidc.authorize_access_token(request)
-        info = token.get("userinfo") or {}
-        resp = RedirectResponse("/")
+
+@app.get("/login/oidc")
+async def login_oidc(request: Request):
+    try:
+        provider, options = preferences.runtime()
+        if not provider:
+            raise HTTPException(404, "OIDC is not configured")
         with db() as c:
-            user = _oidc_login(c, info.get("preferred_username") or info.get("email") or "")
-        _login(resp, user)
-        return resp
+            if setting(c, "admin_user") is None:
+                raise HTTPException(409, "Finish local setup first")
+        # Reject a callback after an administrator changes providers mid-login.
+        request.session['provider_config'] = ca.hash_pw(json.dumps(options, sort_keys=True), b'homeca oidc config')
+        return await provider.oidc.authorize_redirect(request, _external_url(request, "/auth/callback"))
+    except HTTPException:
+        raise
+    except Exception as error:
+        return oidc_failure(error)
+
+
+@app.get("/auth/callback", name="oidc_callback")
+async def oidc_callback(request: Request):
+    try:
+        provider, options = preferences.runtime()
+        if not provider or request.session.pop('provider_config', None) != ca.hash_pw(json.dumps(options, sort_keys=True), b'homeca oidc config'):
+            raise ValueError("Provider changed or login not started")
+        token = await provider.oidc.authorize_access_token(request)
+        info = token.get("userinfo") or {}
+        if not info.get('sub'):
+            raise ValueError('Missing subject')
+        allowed = {item.strip().casefold() for item in options['allowed_users'].split(',') if item.strip()}
+        # The existing deployment permits explicitly configured identities to act as the CA admin.
+        identities = {str(info.get('preferred_username') or '').casefold()}
+        if info.get('email_verified') is True:
+            identities.add(str(info.get('email') or '').casefold())
+        if not allowed or not allowed.intersection(identities):
+            raise ValueError('Identity is not an allowed administrator')
+        with db() as c:
+            user = setting(c, 'admin_user')
+        if not user:
+            raise ValueError('Local administrator missing')
+        response = RedirectResponse('/')
+        _login(response, user)
+        return response
+    except Exception as error:
+        return oidc_failure(error)
+
+
+# All authenticated HomeCA sessions are CA administrators, including existing OIDC sessions.
+class InterfaceSettings(BaseModel):
+    theme: str
+
+
+@app.get("/api/settings/interface")
+def interface_settings(user: str = Depends(session)):
+    with db() as c:
+        return {"theme": setting(c, "ui_theme") or "auto"}
+
+
+@app.put("/api/settings/interface")
+async def save_interface_settings(b: InterfaceSettings, request: Request, user: str = Depends(session)):
+    if not request.headers.get("content-type", "").split(";")[0].strip().lower() == "application/json":
+        raise HTTPException(415, "JSON required")
+    if b.theme not in {"auto", "light", "dark"}:
+        raise HTTPException(400, "choose Auto, Light or Dark")
+    with db() as c:
+        set_setting(c, "ui_theme", b.theme)
+    return {"theme": b.theme}
+
+
+class OIDCSettings(BaseModel):
+    enabled: bool = False
+    issuer: str = Field(default='', max_length=2048)
+    client_id: str = Field(default='', max_length=256)
+    client_secret: str = Field(default='', max_length=8192)
+    allowed_users: str = Field(default='', max_length=4096)
+
+
+@app.get('/api/settings')
+def server_settings(request: Request, user: str = Depends(session)):
+    value = preferences.oidc_options()
+    with db() as c:
+        theme = setting(c, 'ui_theme') or 'auto'
+    return {'ui':{'theme':theme}, 'oidc':{k:v for k,v in value.items() if k != 'secret_enc'},
+            'oidc_secret_configured':bool(value['secret_enc'] or (preferences.saved('oidc_config') is None and OIDC_CLIENT_SECRET_FILE)),
+            'callback_url':_external_url(request, '/auth/callback')}
+
+
+@app.put('/api/settings/oidc')
+def save_oidc(body: OIDCSettings, request: Request, user: str = Depends(session)):
+    preferences.update_oidc(body)
+    return {'settings':server_settings(request, user)}
+
+
+class TrustUpload(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    certificate: str = Field(min_length=1, max_length=500000)
+
+
+@app.get('/api/settings/trust')
+def list_trust(user: str = Depends(session)):
+    return preferences.public_trust()
+
+
+@app.post('/api/settings/trust')
+def upload_trust(body: TrustUpload, user: str = Depends(session)):
+    count = preferences.add_trust(body.name, body.certificate)
+    return {'added':count, 'certificates':preferences.public_trust()}
+
+
+@app.delete('/api/settings/trust/{fingerprint}')
+def remove_trust(fingerprint: str, user: str = Depends(session)):
+    with db() as c:
+        entries = json.loads(setting(c, 'trusted_certificates') or '[]')
+        remaining = [entry for entry in entries if entry['fingerprint'] != fingerprint]
+        if len(entries) == len(remaining):
+            raise HTTPException(404, 'Certificate not found')
+        set_setting(c, 'trusted_certificates', json.dumps(remaining))
+    preferences.provider.cache_clear()
+    return {}
 
 
 # ---------- issuing ----------
@@ -437,7 +537,12 @@ def ca_pem(id: int):
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html")
+    with db() as c:
+        theme = setting(c, "ui_theme") or "auto"
+    # Allowlisted attribute rendered before CSS avoids a flash of the wrong login theme.
+    attribute = f' data-theme="{theme}"' if theme in {"light", "dark"} else ""
+    html = (STATIC / "index.html").read_text().replace('<html lang="en">', f'<html lang="en"{attribute}>')
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

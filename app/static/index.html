@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/static/ui/home-ui.css">
 <link rel="stylesheet" href="/static/style.css">
 
+<link rel="stylesheet" href="/static/home-login.css?v=20261028-shared-1">
 </head>
 <body>
 
@@ -18,11 +19,11 @@
     <label>Username <input id="user" autocomplete="username" required></label>
     <label>Password <input type="password" id="pw" autocomplete="current-password" required></label>
     <label id="pw2-row" hidden>Repeat password <input type="password" id="pw2" autocomplete="new-password"></label>
+    <p class="error" id="auth-err" role="alert"></p>
     <div class="hui-login-actions">
       <button class="primary" id="auth-btn"></button>
       <a class="hui-button" id="sso-row" href="/login/oidc" hidden>Log in with SSO</a>
     </div>
-    <p class="error" id="auth-err" role="alert"></p>
   </form>
 </main>
 

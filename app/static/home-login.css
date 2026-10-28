@@ -1,0 +1,20 @@
+/* HomeUI shared login component. Vendor this file unchanged; app identity is content. */
+#auth{max-width:none;margin:0;padding:0 16px 32px;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text)}
+#auth #auth-form{display:block;box-sizing:border-box;width:100%;max-width:380px;margin:14vh auto 0;padding:18px;border:0;border-radius:12px;background:var(--card);box-shadow:var(--shadow)}
+#auth .logo,#auth .hui-logo{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:0;font-size:22px;line-height:1.5;font-weight:750;letter-spacing:-.02em}
+#auth .logo::before,#auth .hui-logo::before{content:"";display:block;flex:none;width:22px;height:22px;margin:0;border-radius:6px;background:var(--accent)}
+#auth p{margin:0 0 12px;font-size:15px;line-height:1.5}
+#auth #auth-hint{color:var(--muted)}
+#auth label{display:block;margin:14px 0;font-size:13px;line-height:1.5;font-weight:550}
+#auth input{display:block;box-sizing:border-box;width:100%;min-height:38px;margin:6px 0 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:400 13px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+#auth .login-actions,#auth .hui-login-actions{display:grid;gap:10px;margin:18px 0 0;padding:0}
+#auth .login-actions>*,#auth .hui-login-actions>*{width:100%;margin:0}
+#auth button,#auth .login-actions a,#auth .hui-login-actions a{display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:100%;min-height:40px;margin:0;padding:7px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:400 15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;text-decoration:none;cursor:pointer}
+#auth button.primary,#auth button.hui-primary{border-color:transparent;background:var(--accent);color:var(--accent-text);font-weight:600}
+#auth button:hover,#auth .login-actions a:hover,#auth .hui-login-actions a:hover{background:var(--hover)}
+#auth button.primary:hover,#auth button.hui-primary:hover{background:var(--accent);filter:brightness(1.08)}
+#auth .error,#auth .hui-error{min-height:0;margin:8px 0 0;color:var(--bad);font-size:13px;line-height:1.5}
+#auth .error:empty,#auth .hui-error:empty{display:none}
+#auth :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+#auth [hidden]{display:none!important}
+@media(max-width:520px){#auth #auth-form{margin-top:8vh}}

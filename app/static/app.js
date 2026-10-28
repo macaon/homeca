@@ -18,6 +18,7 @@ HomeUI.dropdown($("account-btn"), $("account-panel"));
 $("settings-btn").innerHTML = HomeUI.icon("settings");
 const settingsTabs = HomeUI.tabs($("settings-tabs"));
 $("oidc-open-trust").onclick=()=>settingsTabs.select("trust-tab");
+const trustView=HomeTrust.mount($("outbound-trust"),{api,scope:'Additional outbound trust for HomeCA, currently used by OIDC. This is separate from the CA hierarchy and certificates HomeCA issues.'});
 let defaultTheme = "auto";
 function toast(message, error=false) { HomeUI.toast($("toast"), message, {tone:error?"error":"info"}); }
 function renderOIDC(settings) {
@@ -32,7 +33,7 @@ $("settings-btn").onclick = async () => {
   try {
     const settings = await api("/api/settings");
     $("default-theme").value = settings.ui.theme; renderOIDC(settings);
-    renderTrust(await api("/api/settings/trust"));
+    await trustView.load();
     $("settings-dialog").showModal();
   } catch (error) { toast(error.message, true); }
 };
@@ -43,27 +44,6 @@ $("oidc-form").onsubmit=async event=>{
       client_id:$("oidc-client").value,client_secret:$("oidc-secret").value,allowed_users:$("oidc-allowed").value});
     renderOIDC(result.settings);toast("OAuth settings saved. Local login remains available.");
   } catch(error) { $("oidc-error").textContent=error.message; } finally { button.disabled=false; }
-};
-function renderTrust(certificates){
-  $("trust-list").innerHTML=certificates.length?certificates.map(cert=>`<div class="trust-row"><div><b>${esc(cert.name)}</b><small>${esc(cert.subject)} · expires ${esc(fmtDate(cert.expires))}</small><code>${esc(cert.fingerprint)}</code></div><button type="button" class="danger" data-remove-cert="${cert.fingerprint}">Remove</button></div>`).join(""):"<p class='hui-small'>No additional certificates uploaded. System trust and the deployment CA file remain active.</p>";
-  document.querySelectorAll('[data-remove-cert]').forEach(button=>button.onclick=async()=>{
-    const accepted=await HomeUI.confirmAction($("confirm"),{title:"Remove trusted certificate",message:"SSO may fail if its provider relies on this certificate.",confirmLabel:"Remove"});
-    if(!accepted)return;
-    try{await api('/api/settings/trust/'+button.dataset.removeCert,'DELETE');renderTrust(await api('/api/settings/trust'));}catch(error){toast(error.message,true);}
-  });
-}
-$("trust-form").onsubmit=async event=>{
-  event.preventDefault();const button=event.submitter;button.disabled=true;$("trust-error").textContent="";
-  try{
-    const files=[...$("trust-files").files]; if(files.length>32)throw new Error("Choose up to 32 files.");
-    let added=0;
-    for(const file of files){if(file.size>350000)throw new Error("Certificate files must be smaller than 350 KB.");
-      const bytes=new Uint8Array(await file.arrayBuffer());let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);
-      const result=await api('/api/settings/trust','POST',{name:$("trust-name").value,certificate:btoa(binary)});
-      added+=result.added;renderTrust(result.certificates);
-    }
-    $("trust-form").reset();toast(`${added} certificate(s) added`);
-  }catch(error){$("trust-error").textContent=error.message;}finally{button.disabled=false;}
 };
 $("interface-form").onsubmit = async (event) => {
   event.preventDefault();

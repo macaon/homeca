@@ -231,3 +231,5 @@ DNS-01 / wildcards, OCSP, importing an existing CA, multiple users, and master-k
 ---
 
 Built with the assistance of Claude (Anthropic).
+
+Trust uses the unchanged shared HomeTemplate `home-trust.js` and `home-trust.css` component. Uploads, certificate rows, messages and removal confirmation have one layout across Home* apps. OIDC provider roots belong in Trust. App-specific scope details are under “Where this trust store applies.”

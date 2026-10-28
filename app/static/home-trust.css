@@ -1,0 +1,36 @@
+/* Shared Trust tab and its containing settings dialog. Do not override per app. */
+dialog:has([data-home-trust]){box-sizing:border-box;width:min(760px,calc(100vw - 32px));max-height:85dvh;margin:auto;padding:22px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);box-shadow:var(--shadow);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+dialog:has([data-home-trust])>.dlg-head,dialog:has([data-home-trust])>.hui-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 18px;padding:0}
+dialog:has([data-home-trust])>.dlg-head h2,dialog:has([data-home-trust])>.hui-dialog-head h2{margin:0;color:var(--text);font-size:17px;line-height:1.5;font-weight:600;text-transform:none;letter-spacing:0}
+dialog:has([data-home-trust])>.tabs,dialog:has([data-home-trust])>.hui-tabs{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;margin:0 0 20px;padding:4px;border-radius:10px;background:var(--line)}
+dialog:has([data-home-trust])>.tabs button,dialog:has([data-home-trust])>.hui-tabs button{flex:1;display:flex;align-items:center;justify-content:center;white-space:nowrap;margin:0;padding:7px 14px;border:0;border-radius:8px;background:transparent;color:var(--muted);font:400 15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+dialog:has([data-home-trust])>.tabs button[aria-selected=true],dialog:has([data-home-trust])>.hui-tabs button[aria-selected=true]{background:var(--card);color:var(--text);font-weight:600;box-shadow:var(--shadow)}
+[data-home-trust]{display:block;margin:0;padding:0;color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+[data-home-trust] *{box-sizing:border-box}[data-home-trust] [hidden]{display:none!important}
+[data-home-trust] .ht-scope,[data-home-trust] .ht-help{margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.5}
+[data-home-trust] .ht-empty{margin:0;padding:14px 0;color:var(--muted);font-size:13px;line-height:1.5}
+[data-home-trust] .ht-list{margin:0 0 18px;padding:0;border-bottom:1px solid var(--line)}
+[data-home-trust] .ht-form{margin:0;padding:0}
+[data-home-trust] label{display:block;margin:14px 0;font-size:13px;line-height:1.5;font-weight:550}
+[data-home-trust] input{display:block;width:100%;min-height:38px;margin:6px 0 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:400 13px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+[data-home-trust] button{display:inline-flex;align-items:center;justify-content:center;gap:6px;margin:0;padding:7px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:400 15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;cursor:pointer}
+[data-home-trust] button:hover{background:var(--hover)}[data-home-trust] button:disabled{opacity:.5;cursor:default}
+[data-home-trust] button.ht-primary{border-color:transparent;background:var(--accent);color:var(--accent-text);font-weight:600}
+[data-home-trust] .ht-primary:hover{filter:brightness(1.08)}[data-home-trust] button.ht-danger{color:var(--bad)}
+[data-home-trust] .ht-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:20px 0 0;padding:0}
+[data-home-trust] .ht-row{display:flex;align-items:flex-start;gap:12px;margin:0;padding:14px 0;border-bottom:1px solid var(--line)}[data-home-trust] .ht-row:last-child{border-bottom:0}
+[data-home-trust] .ht-details{flex:1;min-width:0}[data-home-trust] .ht-details strong{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+[data-home-trust] .ht-details span{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+[data-home-trust] .ht-details code{display:block;margin-top:5px;color:var(--muted);font:10px/1.5 ui-monospace,"SF Mono",Menlo,monospace;overflow-wrap:anywhere}
+[data-home-trust] .ht-error,[data-home-trust] .ht-status{margin:12px 0 0;font-size:13px;line-height:1.5}[data-home-trust] .ht-error{color:var(--bad)}[data-home-trust] .ht-status{color:var(--ok)}
+[data-home-trust] .ht-confirm{width:min(440px,calc(100vw - 32px));padding:22px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+[data-home-trust] .ht-confirm h2{margin:0 0 18px;font-size:17px;line-height:1.5;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text)}[data-home-trust] .ht-confirm p{margin:0;font-size:13px}
+[data-home-trust] :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(max-width:520px){[data-home-trust] .ht-row{flex-wrap:wrap}}
+
+dialog:has([data-home-trust])>.dlg-head,dialog:has([data-home-trust])>.hui-dialog-head{min-height:36px}
+dialog:has([data-home-trust])>.dlg-head>button,dialog:has([data-home-trust])>.hui-dialog-head>button{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:7px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);font:400 15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+dialog:has([data-home-trust])>.tabs,dialog:has([data-home-trust])>.hui-tabs{scrollbar-width:none;min-height:42.5px}
+[data-home-trust] .ht-scope-notes{margin:18px 0 0;padding:0;font-size:13px;color:var(--muted)}
+[data-home-trust] .ht-scope-notes summary{margin:0;padding:0;font:400 13px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;cursor:pointer;color:var(--muted)}
+[data-home-trust] .ht-scope-notes p{margin:10px 0 0;font-size:13px;line-height:1.5}

@@ -59,11 +59,11 @@ plain HTTP at `HOMECA_PUBLIC_URL`.
 
 HomeCA vendors **HomeUI 0.1.0** from HomeTemplate under `app/static/ui/`; the adopted [design guideline](docs/design-guidelines.md) and `HOMEUI_VERSION` record the baseline. App-specific certificate styles remain separate.
 
-The settings cog sits immediately left of the account name. The account menu contains personal appearance, reset to the server appearance, password and logout. With one dashboard there is no navigation hamburger; certificate creation lives beside the certificate list.
+The settings cog sits immediately left of the account name. The account menu contains password and logout. Appearance is configured under the settings cog. With one dashboard there is no navigation hamburger; certificate creation lives beside the certificate list.
 
 Under **Server settings**:
 
-- **User Interface:** choose Auto, Light or Dark as the server default. Auto is the initial value. The login page follows this default; a signed-in personal choice is scoped to that account and browser.
+- **User Interface:** choose Auto, Light or Dark as the server default. Auto is the initial value. The dashboard and login page both follow this setting; there is no separate account-menu appearance override.
 - **Trust:** upload multiple public PEM/DER certificates or a PEM bundle for your identity provider. System roots and `HOMECA_OIDC_CA_FILE` remain trusted. Private keys are rejected. Trust uploads are separate from your issuing CA hierarchy.
 - **OAuth / OIDC:** enable SSO, paste an HTTPS issuer or full discovery URL, enter a client ID/secret and explicitly list the administrator usernames or verified emails allowed to sign in. The callback remains `/auth/callback`, shown with the external origin in the settings form. Saving does not require a restart. Saved fields remain populated; a masked secret placeholder means leave blank to retain it.
 

@@ -17,11 +17,7 @@ async function api(path, method = "GET", body) {
 HomeUI.dropdown($("account-btn"), $("account-panel"));
 $("settings-btn").innerHTML = HomeUI.icon("settings");
 HomeUI.tabs($("settings-tabs"));
-const appearance = HomeUI.themeController({prefix: "homeca", defaultTheme: document.documentElement.dataset.theme || "auto"});
-let currentUser = null, defaultTheme = "auto";
-function syncThemeBtn() { $("theme-btn").textContent = `Appearance: ${appearance.mode}`; }
-$("theme-btn").onclick = () => { appearance.cycle(); syncThemeBtn(); };
-$("theme-reset").onclick = () => { appearance.useDefault(); syncThemeBtn(); };
+let defaultTheme = "auto";
 function toast(message, error=false) { HomeUI.toast($("toast"), message, {tone:error?"error":"info"}); }
 function renderOIDC(settings) {
   $("oidc-enabled").checked=settings.oidc.enabled; $("oidc-issuer").value=settings.oidc.issuer;
@@ -73,7 +69,7 @@ $("interface-form").onsubmit = async (event) => {
   try {
     const saved = await api("/api/settings/interface", "PUT", {theme: $("default-theme").value});
     defaultTheme = saved.theme;
-    appearance.setContext(currentUser, defaultTheme); syncThemeBtn();
+    HomeUI.applyTheme(defaultTheme);
     toast("Interface settings saved");
   } catch (error) { $("interface-error").textContent = error.message; }
 };
@@ -86,9 +82,8 @@ async function init() {
   $("app").hidden = !s.logged_in;
   $("auth").hidden = s.logged_in;
   $("sso-row").hidden = !s.sso || s.setup_needed;
-  currentUser = s.logged_in ? s.user : null;
   defaultTheme = s.ui.theme;
-  appearance.setContext(currentUser, defaultTheme); syncThemeBtn();
+  HomeUI.applyTheme(defaultTheme);
   if (!s.logged_in) document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   if (s.logged_in) { $("account-btn").textContent = `${s.user} ▾`; return load(); }
   $("pw2-row").hidden = !s.setup_needed;

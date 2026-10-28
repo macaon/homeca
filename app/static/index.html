@@ -33,8 +33,6 @@
     <button id="settings-btn" class="hui-icon-button" aria-label="Server settings" title="Server settings"></button>
     <button id="account-btn" aria-haspopup="true" aria-expanded="false">Account ▾</button>
     <div id="account-panel" class="hui-menu">
-      <button id="theme-btn"></button>
-      <button id="theme-reset">Use server appearance</button>
       <button id="pwd-btn">Password</button>
       <button id="logout-btn">Log out</button>
     </div>
@@ -67,7 +65,7 @@
   <section id="interface-panel">
     <form id="interface-form">
       <label>Default appearance<select id="default-theme"><option value="auto">Auto · follow system</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-      <p class="hui-small">Applies to the login page and accounts using the server appearance. Auto is the default for new installations.</p>
+      <p class="hui-small">Applies throughout HomeCA, including the login page. Auto follows your operating system.</p>
       <p class="error" id="interface-error" role="alert"></p>
       <div class="hui-dialog-foot"><button type="button" data-close>Close</button><button class="primary">Save interface settings</button></div>
     </form>

@@ -8,6 +8,8 @@ DATA.mkdir(parents=True, exist_ok=True)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, salt TEXT, password TEXT, subject TEXT UNIQUE);
+CREATE TABLE IF NOT EXISTS blocked_users (username TEXT PRIMARY KEY, subject TEXT UNIQUE);
 CREATE TABLE IF NOT EXISTS certs (
   id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES certs(id), kind TEXT NOT NULL,
   cn TEXT, serial TEXT, not_before TEXT, not_after TEXT,

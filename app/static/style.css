@@ -60,3 +60,6 @@ td:first-child { color: var(--muted); width: 38%; padding-right: 10px; }
 
 
 .hui-inline input{width:auto;margin:0}.trust-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}.trust-row>div{flex:1;min-width:0}.trust-row small{display:block;color:var(--muted)}.trust-row code{display:block;font-size:10px;overflow-wrap:anywhere}#settings-dialog{width:min(760px,calc(100% - 32px))}
+
+/* HomeUI 0.1.1: keep every settings option visible. */
+.tabs{flex-wrap:wrap;overflow:visible}.hui-access-section+.hui-access-section{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}.hui-access-heading{font-size:17px;text-transform:none;letter-spacing:-.02em;color:var(--text);margin:0 0 12px}

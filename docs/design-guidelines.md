@@ -1,6 +1,6 @@
 # Home* Applications — Design Guidelines
 
-**Version 0.1.0 · 28 October 2026**
+**Version 0.1.1 · 30 October 2026**
 
 **Source:** [HomeTemplate repository](https://git.home.arpa/home.arpa/hometemplate)
 **Status:** baseline for new Home* apps; adopt deliberately in existing apps.
@@ -85,7 +85,7 @@ The consistent reading order is:
 
 Navigation contains places such as Dashboard, Sites, Certificates, Servers and Issuers. Use visible section links by default when several primary views exist. Mark the current link with `aria-current="page"`.
 
-A personal **Navigation style** preference can choose **Expanded** or **Compact menu**. Save it per account. HomeCaddy exposes it under User Interface; the starter exposes a personal navigation control in the account menu. Both implementations use the same header behaviour.
+Put **Navigation style** under **Server settings → User Interface**, following HomeCaddy. It selects **Expanded** or **Compact menu** and is saved per account, even though it appears in the settings dialog. Do not duplicate it in the account dropdown. Both modes use the same header behaviour.
 
 On narrow screens, collapse navigation automatically, even if Expanded is selected. HomeUI uses a 900 px breakpoint. Do not make users change a preference merely to use a phone.
 
@@ -113,10 +113,13 @@ Use a native modal dialog with a clear heading, a labelled close button and tabs
 | --- | --- |
 | **User Interface** | Server appearance default and relevant layout preferences |
 | **Trust** | Shared public CA certificates for outbound connections |
-| **OAuth / OIDC** | Provider enablement, discovery/issuer URL, client credentials and allowlist |
-| **Users** | Accounts, roles and account-management actions |
+| **Access** | Accounts and roles, OAuth / OIDC provider configuration and access-related audit |
 
-Omit unused tabs. Add an app-specific tab when there is a genuine configuration group, rather than squeezing unrelated settings into User Interface.
+Within Access, use clearly labelled Users, OAuth / OIDC and Audit sections when those capabilities exist. Each section keeps its own save actions and error feedback; do not mix the account and provider forms. Group related app-specific settings too: for example, a Models tab contains model-server connection details and model policies.
+
+Keep the top-level tab list compact. Tabs wrap into additional rows at narrow widths rather than hiding options behind horizontal scrolling. The dialog body scrolls vertically for longer forms and grouped sections. Preserve keyboard tab navigation across wrapped rows.
+
+Omit unused tabs and sections. Add an app-specific tab when there is a genuine configuration group, rather than squeezing unrelated settings into User Interface.
 
 Forms save per tab, with specific labels such as **Save interface settings** or **Save OAuth settings**. Keep unsaved values on validation failure, show the error within the form, disable submission while it is running, and give a brief success notification.
 

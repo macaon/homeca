@@ -16,7 +16,8 @@ async function api(path, method = "GET", body) {
 // ---------- shared HomeUI chrome ----------
 HomeUI.dropdown($("account-btn"), $("account-panel"));
 $("settings-btn").innerHTML = HomeUI.icon("settings");
-const settingsTabs = HomeUI.tabs($("settings-tabs"));
+const settingsTabs = HomeUI.tabs($("settings-tabs"),{onChange:id=>{if(id==="access-tab")accountsView.refresh();}});
+const accountsView=HomeAccounts.mount($("account-users"),{api,notify:message=>toast(message)});
 $("oidc-open-trust").onclick=()=>settingsTabs.select("trust-tab");
 const trustView=HomeTrust.mount($("outbound-trust"),{api,scope:'Additional outbound trust for HomeCA, currently used by OIDC. This is separate from the CA hierarchy and certificates HomeCA issues.'});
 let defaultTheme = "auto";
@@ -66,7 +67,7 @@ async function init() {
   defaultTheme = s.ui.theme;
   HomeUI.applyTheme(defaultTheme);
   if (!s.logged_in) document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
-  if (s.logged_in) { $("account-btn").textContent = `${s.user} ▾`; return load(); }
+  if (s.logged_in) { $("pwd-btn").hidden=s.local===false; $("account-btn").textContent = `${s.user} ▾`; return load(); }
   $("pw2-row").hidden = !s.setup_needed;
   $("pw2").required = s.setup_needed;
   $("auth-btn").textContent = s.setup_needed ? "Create admin user" : "Log in";

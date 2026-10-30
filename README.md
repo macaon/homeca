@@ -57,7 +57,7 @@ plain HTTP at `HOMECA_PUBLIC_URL`.
 
 ## Interface and single sign-on
 
-HomeCA vendors **HomeUI 0.1.0** from HomeTemplate under `app/static/ui/`; the adopted [design guideline](docs/design-guidelines.md) and `HOMEUI_VERSION` record the baseline. App-specific certificate styles remain separate.
+HomeCA vendors **HomeUI 0.1.1** from HomeTemplate under `app/static/ui/`; the adopted [design guideline](docs/design-guidelines.md) and `HOMEUI_VERSION` record the baseline. App-specific certificate styles remain separate.
 
 The settings cog sits immediately left of the account name. The account menu contains password and logout. Appearance is configured under the settings cog. With one dashboard there is no navigation hamburger; certificate creation lives beside the certificate list.
 
@@ -233,3 +233,11 @@ DNS-01 / wildcards, OCSP, importing an existing CA, multiple users, and master-k
 Built with the assistance of Claude (Anthropic).
 
 Trust uses the unchanged shared HomeTemplate `home-trust.js` and `home-trust.css` component. Uploads, certificate rows, messages and removal confirmation have one layout across Home* apps. OIDC provider roots belong in Trust. App-specific scope details are under “Where this trust store applies.”
+
+## Administrator accounts
+
+Server settings → Access groups named administrator accounts and OAuth / OIDC settings. Every account has full administrative access, matching HomeCaddy; application data remains shared. The original local administrator is migrated without changing its password and cannot be removed. Additional local accounts use passwords of at least 12 characters. Administrators can reset another account’s local password or remove an additional account; both actions revoke that account’s sessions. Password changes sign out only that account’s other sessions.
+
+SSO identities are linked by issuer and subject to an exact username, with a verified email available for explicit allowlisting. Explicitly allowlisted new identities receive named SSO-only administrator accounts. The legacy environment-configured administrator match retains its original recovery-account mapping. Removing an account blocks its username and linked SSO subject from automatic provisioning; adding that username explicitly restores access. Removing an account does not remove certificates, keys, registry images or other shared application data.
+
+Back up the application database before upgrading; it now also contains user password hashes, SSO links and removed-account blocks. Existing encryption/master-key backups remain necessary. Upgrading restarts the app and signs out existing in-memory sessions.

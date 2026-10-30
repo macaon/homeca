@@ -20,6 +20,7 @@ from .ca import (cert_of, chain, hash_pw, iso, key_of, now, parse, revoke_cert, 
                  status_of, store_cert, urls, write_crl)
 from . import ca, preferences
 from .store import db
+from . import accounts
 
 SECURE = os.environ.get("HOMECA_SECURE_COOKIE") == "1"
 STATIC = Path(__file__).parent / "static"
@@ -72,7 +73,12 @@ app.add_middleware(SessionMiddleware, secret_key=ca.derived_secret(b"homeca oidc
 def session(homeca: str | None = Cookie(None)) -> str:
     if homeca not in SESSIONS:
         raise HTTPException(401, "not logged in")
-    return SESSIONS[homeca]
+    user = SESSIONS[homeca]
+    with db() as c:
+        if not accounts.exists(c,user):
+            SESSIONS.pop(homeca,None)
+            raise HTTPException(401,"Account no longer exists")
+    return user
 
 
 class Login(BaseModel):
@@ -98,21 +104,29 @@ def _set_admin(c, user, pw):
     set_setting(c, "admin_user", user)
     set_setting(c, "admin_salt", salt.hex())
     set_setting(c, "admin_hash", hash_pw(pw, salt))
+    accounts.save_password(c,user,pw)
 
 
 def _check_admin(c, user, pw):
-    h, salt, u = setting(c, "admin_hash"), setting(c, "admin_salt"), setting(c, "admin_user")
-    if h is None:
-        return False
-    ok_pw = hmac.compare_digest(hash_pw(pw, bytes.fromhex(salt)), h)  # always hash, whatever the username
-    return ok_pw and hmac.compare_digest((user or "").encode(), u.encode())
+    return accounts.check_password(c,user,pw)
+
+
+accounts.register(app,session,SESSIONS,_set_admin)
+
+
+def _local_account(username):
+    if not username:return False
+    with db() as c:
+        accounts.ensure(c)
+        row=c.execute("SELECT password FROM users WHERE username=?",(username,)).fetchone()
+        return bool(row and row['password'])
 
 
 @app.get("/api/state")
 def state(homeca: str | None = Cookie(None)):
     with db() as c:
         return {"setup_needed": setting(c, "admin_hash") is None, "logged_in": homeca in SESSIONS,
-                "user": SESSIONS.get(homeca), "sso": preferences.oidc_options()["enabled"],
+                "user": SESSIONS.get(homeca), "local": _local_account(SESSIONS.get(homeca)), "sso": preferences.oidc_options()["enabled"],
                 "ui": {"theme": setting(c, "ui_theme") or "auto"}}
 
 
@@ -143,8 +157,9 @@ def change_password(b: PwChange, user: str = Depends(session), homeca: str | Non
         if not _check_admin(c, user, b.current):
             time.sleep(1)
             raise HTTPException(403, "current password is wrong")  # not 401: that means "session expired" to the UI
-        _set_admin(c, user, b.new)
-    for t in [t for t in SESSIONS if t != homeca]:  # sign out everywhere else
+        if user == setting(c,"admin_user"):_set_admin(c,user,b.new)
+        else:accounts.save_password(c,user,b.new)
+    for t in [t for t in SESSIONS if t != homeca and SESSIONS[t] == user]:  # sign out everywhere else
         del SESSIONS[t]
     return {}
 
@@ -209,17 +224,10 @@ async def oidc_callback(request: Request):
         info = token.get("userinfo") or {}
         if not info.get('sub'):
             raise ValueError('Missing subject')
-        allowed = {item.strip().casefold() for item in options['allowed_users'].split(',') if item.strip()}
-        # The existing deployment permits explicitly configured identities to act as the CA admin.
-        identities = {str(info.get('preferred_username') or '').casefold()}
-        if info.get('email_verified') is True:
-            identities.add(str(info.get('email') or '').casefold())
-        if not allowed or not allowed.intersection(identities):
-            raise ValueError('Identity is not an allowed administrator')
         with db() as c:
-            user = setting(c, 'admin_user')
-        if not user:
-            raise ValueError('Local administrator missing')
+            c.execute("BEGIN IMMEDIATE")
+            legacy = OIDC_ADMIN_MATCH if preferences.saved('oidc_config') is None else ""
+            user = accounts.sso_user(c, info, options, legacy or "")
         response = RedirectResponse('/')
         _login(response, user)
         return response

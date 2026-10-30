@@ -166,7 +166,7 @@ if the old key may be compromised. Intermediates and roots cannot be renewed; cr
 - ACME needs three things to issue: the client's address in `HOMECA_ACME_CLIENTS`, proof of control of the
   name over HTTP-01, and the name being inside the chosen CA's name constraints.
 - Optional **OIDC/Keycloak login** is configured under **Server settings → OAuth / OIDC**. Local login stays available so an identity-provider outage or expired certificate cannot prevent CA recovery.
-- Only explicitly allowed usernames or verified email addresses may use SSO. They act as the existing CA administrator and can download private keys. This migration does not introduce ordinary-user roles. Saved provider secrets are encrypted using a separate key derived from the existing master key.
+- Only explicitly allowed usernames or verified email addresses may use SSO. They use named administrator accounts with full access, including private-key downloads. The original local administrator remains the protected recovery account. Saved provider secrets are encrypted using a separate key derived from the existing master key.
 - Public unauthenticated endpoints: `/crl/<id>.crl`, `/ca/<id>.crt`, `/ca/<id>.pem`.
 
 ### Upgrading from the passphrase version

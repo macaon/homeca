@@ -227,6 +227,12 @@ function setKind(k) {
   document.querySelectorAll("#tabs button").forEach((b) => { b.setAttribute("aria-selected", b.dataset.kind === k); b.tabIndex=b.dataset.kind===k?0:-1; });
   $("f-days").value = DAYS[k];
   $("f-cn").required = k !== "csr";
+  const ca = k !== "leaf", name = ca ? "CA name" : "Common name";
+  $("cn-label").textContent = name; $("cn-help").setAttribute("aria-label", "Help: " + name);
+  $("cn-hint").textContent = ca
+    ? "A display name for this CA, shown in trust stores and in the certificate list. It isn't a hostname. Example: Home Root CA."
+    : "Usually the main hostname. Clients match on the Subject alternative names below, so list every name there too.";
+  $("cn-hint").hidden = true; $("cn-help").setAttribute("aria-expanded", "false");
   const cas = certs.filter((c) => c.kind !== "leaf" && c.status === "valid" || c.kind !== "leaf" && c.status === "expiring");
   const ok = k === "intermediate" ? cas.filter((c) => c.kind === "root" || c.kind === "intermediate") : cas;
   $("f-parent").innerHTML = ok.map((c) => `<option value="${c.id}">${esc(c.cn)} (${KIND[c.kind].toLowerCase()})</option>`).join("");
@@ -245,6 +251,7 @@ function warnDays() {
   $("days-warn").hidden = !((kind === "leaf" || kind === "csr") && $("f-usage").value !== "client" && +$("f-days").value > 398);
 }
 $("f-days").oninput = $("f-usage").onchange = warnDays;
+HomeUI.help();
 document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => setKind(b.dataset.kind)));
 $("tabs").addEventListener("keydown", event => {
   const buttons=[...$("tabs").querySelectorAll("button")], index=buttons.indexOf(document.activeElement);

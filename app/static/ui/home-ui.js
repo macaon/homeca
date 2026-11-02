@@ -47,17 +47,27 @@
   tablist.addEventListener('click',click);tablist.addEventListener('keydown',keyboard);select(initial||buttons[0].id);return {select,destroy(){tablist.removeEventListener('click',click);tablist.removeEventListener('keydown',keyboard);}};
  }
  function toast(element,message,{tone='info',duration=6500}={}){clearTimeout(toastTimers.get(element));element.textContent=message;element.dataset.tone=tone;element.setAttribute('role',tone==='error'?'alert':'status');element.hidden=false;toastTimers.set(element,setTimeout(()=>{element.hidden=true;},duration));}
+ // Click-to-expand hints: <button type="button" class="hui-help" aria-expanded="false" aria-controls="ID" aria-label="Help: Field">?</button> + <small class="hui-hint" id="ID" hidden>. One delegated listener per scope.
+ function help(scope=document){
+  const toggle=(btn,open)=>{const hint=document.getElementById(btn.getAttribute('aria-controls'));if(!hint)return;open??=hint.hidden;hint.hidden=!open;btn.setAttribute('aria-expanded',String(open));};
+  const click=e=>{const btn=e.target.closest?.('.hui-help');if(btn){e.preventDefault();toggle(btn);}};
+  const key=e=>{if(e.key!=='Escape')return;const btn=e.target.closest?.('.hui-help[aria-expanded="true"]');if(btn){e.preventDefault();e.stopPropagation();toggle(btn,false);}};
+  scope.addEventListener('click',click);scope.addEventListener('keydown',key);
+  return{destroy(){scope.removeEventListener('click',click);scope.removeEventListener('keydown',key);}};
+ }
  const confirmations=new WeakSet();
  function confirmFields(box,fields){
   const el=(tag,props={},kids=[])=>{const n=document.createElement(tag);Object.assign(n,props);n.append(...kids);return n;};
   const hint=f=>f.help?[el('small',{className:'hui-small',textContent:f.help})]:[];
+  // `hint` = collapsible "?" text: [button for after the label, text for after the visible help].
+  const more=f=>{if(!f.hint)return[[],[]];const id='hui-hint-'+f.name,b=el('button',{type:'button',className:'hui-help',textContent:'?'});b.setAttribute('aria-expanded','false');b.setAttribute('aria-controls',id);b.setAttribute('aria-label','Help: '+f.label);return[[b],[el('small',{className:'hui-hint',id,hidden:true,textContent:f.hint})]];};
   box.replaceChildren(...fields.map(f=>{
-   const t=f.type||'text',opts=f.options||[];
-   if(t==='checkbox')return el('label',{className:'hui-inline'},[el('input',{type:'checkbox',name:f.name,checked:!!f.value}),f.label,...hint(f)]);
-   if(t==='radio'||t==='checkboxes'){const radio=t==='radio',on=[].concat(f.value??[]);return el('fieldset',{className:'hui-fields'},[el('legend',{textContent:f.label}),...opts.map(o=>el('label',{className:'hui-inline'},[el('input',{type:radio?'radio':'checkbox',name:f.name,value:o.value,checked:on.includes(o.value),required:radio&&!!f.required}),o.label])),...hint(f)]);}
+   const t=f.type||'text',opts=f.options||[],[btn,txt]=more(f);
+   if(t==='checkbox')return el('div',{},[el('label',{className:'hui-inline'},[el('input',{type:'checkbox',name:f.name,checked:!!f.value}),f.label,...btn,...hint(f)]),...txt]);
+   if(t==='radio'||t==='checkboxes'){const radio=t==='radio',on=[].concat(f.value??[]);return el('fieldset',{className:'hui-fields'},[el('legend',{},[f.label,...btn]),...txt,...opts.map(o=>el('label',{className:'hui-inline'},[el('input',{type:radio?'radio':'checkbox',name:f.name,value:o.value,checked:on.includes(o.value),required:radio&&!!f.required}),o.label])),...hint(f)]);}
    const ctl=t==='select'?el('select',{name:f.name,required:!!f.required},opts.map(o=>el('option',{value:o.value,textContent:o.label,selected:o.value===f.value})))
     :el(t==='textarea'?'textarea':'input',{name:f.name,value:f.value??'',required:!!f.required,placeholder:f.placeholder??'',...(t==='textarea'?{rows:f.rows||3}:{type:t,autocomplete:t==='password'?'new-password':'off'})});
-   return el('label',{},[f.label,...hint(f),ctl]);
+   return el('label',{},[f.label,...btn,...hint(f),...txt,ctl]);
   }));
  }
  function confirmValues(form,fields){const d=new FormData(form);return Object.fromEntries(fields.map(f=>[f.name,f.type==='checkbox'?d.has(f.name):f.type==='checkboxes'?d.getAll(f.name):d.get(f.name)??'']));}
@@ -70,12 +80,13 @@
   confirmations.add(dialog);
   dialog.querySelector('[data-confirm-title]').textContent=title;dialog.querySelector('[data-confirm-message]').textContent=message??'';accept.textContent=confirmLabel;dialog.returnValue='';
   if(box){box.replaceChildren();box.onkeydown=null;}
-  if(fields){confirmFields(box,fields);cancel.formNoValidate=true;box.onkeydown=e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();form.requestSubmit(accept);}};}
+  let helper;
+  if(fields){confirmFields(box,fields);helper=help(box);cancel.formNoValidate=true;box.onkeydown=e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();form.requestSubmit(accept);}};}
   return new Promise(resolve=>{dialog.addEventListener('close',()=>{
    const ok=dialog.returnValue==='confirm',out=fields?(ok?confirmValues(form,fields):null):ok;
-   confirmations.delete(dialog);if(box){box.replaceChildren();box.onkeydown=null;}resolve(out);},{once:true});
+   helper?.destroy();confirmations.delete(dialog);if(box){box.replaceChildren();box.onkeydown=null;}resolve(out);},{once:true});
    dialog.showModal();(fields&&box.querySelector('input,select,textarea')||cancel)?.focus();});
  }
- root.HomeUI=Object.freeze({version:'0.1.0',escape,icon,applyTheme,themeController,dropdown,overflow,tabs,toast,confirmAction});
+ root.HomeUI=Object.freeze({version:'0.1.0',escape,icon,applyTheme,themeController,dropdown,overflow,tabs,toast,help,confirmAction});
  if(typeof module!=='undefined')module.exports=root.HomeUI;
 })(typeof window!=='undefined'?window:globalThis);

@@ -47,6 +47,7 @@ Environment variables:
 | `HOMECA_DATA` | `./data` (`/data` in the container) | Directory holding `homeca.db` |
 | `HOMECA_PUBLIC_URL` | unset | Base URL devices use to reach the plain-HTTP port, e.g. `http://ca.home.arpa:8080`. Embedded in issued certs as the CRL distribution point and CA-issuer (AIA) URL. If unset, those extensions are omitted. Keep it plain HTTP: clients must not need TLS to validate TLS. |
 | `HOMECA_SECURE_COOKIE` | `0` | Set `1` once the UI is served over HTTPS by your reverse proxy |
+| `HOMECA_TRUSTED_PROXIES` | unset | Your reverse proxy's address or network (comma-separated), e.g. `172.28.0.1`. Only requests from it may name the real client in `X-Forwarded-For`; everyone else's header is ignored. Without it sign-in limits and the audit log see the proxy's address for every user. Unrelated to the ACME allowlist, which always uses the real peer address. |
 | `HOMECA_ACME_CLIENTS` | unset | Comma-separated CIDRs allowed to use ACME, e.g. `10.1.1.0/24` or NPM's IP. **Empty disables ACME.** |
 | `HOMECA_ACME_HOSTNAME` | unset | Name ACME clients use for HomeCA, e.g. `ca.home.arpa`. HomeCA issues itself a TLS certificate for it. |
 | `HOMECA_TLS_PORT` | `8443` | Port of the HTTPS (ACME) listener |
@@ -160,7 +161,7 @@ if the old key may be compromised. Intermediates and roots cannot be renewed; cr
 - Losing the master key means losing every stored private key. Keep a copy somewhere safe, separate from backups.
 - You can change the admin password in the UI. The master key cannot be rotated in place.
 - Sessions live in memory with an `HttpOnly`, `SameSite=Strict` cookie; a restart logs everyone out.
-  Failed logins are delayed one second. The API only accepts JSON, which together with
+  After 10 failed sign-ins for an account from one source within five minutes (or 30 from one source across accounts) further attempts get HTTP 429 until the window passes; the same applies to wrong current passwords and to invalid API tokens. Only failures count. The first block, and at most one failed sign-in a minute per source, are audited. The shared `home_security.py` implements this. The API only accepts JSON, which together with
   `SameSite=Strict` covers CSRF.
 - A logged-in session can download private keys. Treat access to the UI as access to the CA.
 - ACME needs three things to issue: the client's address in `HOMECA_ACME_CLIENTS`, proof of control of the

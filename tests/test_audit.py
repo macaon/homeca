@@ -2,17 +2,21 @@
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
-from app import auditlog, main, store
+from app import apitokens, auditlog, main, store
 
 PASSWORD = 'test-administrator-password'
+
+
+def reset_guards():
+    for g in (main.guard, apitokens.token_guard):
+        g.failures.clear(), g.blocked.clear(), g.audited.clear()
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(store, 'DATA', tmp_path)
-    monkeypatch.setattr(main.time, 'sleep', lambda _: None)
     main.SESSIONS.clear()
-    main.FAILURES.clear()
+    reset_guards()
     c = TestClient(main.app)
     assert c.post('/api/setup', json={'username': 'owner', 'password': PASSWORD}).status_code == 200
     yield c

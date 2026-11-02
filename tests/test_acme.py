@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.x509 import verification
 from fastapi.testclient import TestClient
 
-from app import acme, ca, main, pki
+from app import acme, apitokens, ca, main, pki
 
 b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b"=").decode()  # noqa: E731
 PW = "correct horse battery"
@@ -21,8 +21,9 @@ S = {}  # state shared between tests
 
 
 @pytest.fixture(autouse=True)
-def fast_login(monkeypatch):
-    monkeypatch.setattr(main.time, "sleep", lambda _: None)
+def fresh_guards():
+    for g in (main.guard, apitokens.token_guard):
+        g.failures.clear(), g.blocked.clear(), g.audited.clear()
 
 
 @pytest.fixture(scope="module")

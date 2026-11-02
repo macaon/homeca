@@ -3,7 +3,6 @@ import hmac
 import json
 import os
 import secrets
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -22,6 +21,7 @@ from . import ca, preferences
 from .store import db
 from . import accounts, apitokens, auditlog
 from .auditlog import audit
+from .home_security import LoginGuard, parse_networks
 
 SECURE = os.environ.get("HOMECA_SECURE_COOKIE") == "1"
 STATIC = Path(__file__).parent / "static"
@@ -115,12 +115,12 @@ def _check_admin(c, user, pw):
 
 accounts.register(app,session,SESSIONS,_set_admin)
 auditlog.register(app,session)
-read = apitokens.register(app, session)  # session or read-only API token
-FAILURES: dict[str, float] = {}  # one audit entry per source per minute, so guessing cannot flood the log
-
-
-def _source(request: Request) -> str:
-    return request.client.host if request.client else ""
+# Sign-ins are limited per source and account. HOMECA_TRUSTED_PROXIES lists the reverse proxy's address or network
+# (e.g. 172.28.0.1); only requests from it may name the real client in X-Forwarded-For. This is separate from
+# uvicorn's proxy_headers, which stays off: the ACME client allowlist must keep seeing the real peer address.
+TRUSTED_PROXIES = parse_networks(os.environ.get("HOMECA_TRUSTED_PROXIES", ""))
+guard = LoginGuard(TRUSTED_PROXIES, on_block=lambda username, source: audit(username, "Sign-in blocked", detail=source + " · too many attempts"))
+read = apitokens.register(app, session, TRUSTED_PROXIES)  # session or read-only API token
 
 
 def _local_account(username):
@@ -146,33 +146,38 @@ def setup(b: Login, r: Response, request: Request):
             raise HTTPException(409, "already set up")
         _set_admin(c, b.username.strip(), b.password)
     _login(r, b.username.strip())
-    audit(b.username.strip(), "Administrator created", detail=_source(request))
+    audit(b.username.strip(), "Administrator created", detail=guard.source(request))
     return {}
 
 
 @app.post("/api/login")
 def login(b: Login, r: Response, request: Request):
+    guard.check(request, b.username)
     with db() as c:
         ok = _check_admin(c, b.username.strip(), b.password)
     if not ok:
-        if time.monotonic() - FAILURES.get(_source(request), -60) >= 60:
-            FAILURES[_source(request)] = time.monotonic()
-            audit(b.username.strip(), "Sign-in failed", detail=_source(request))
-        time.sleep(1)
+        if guard.fail(request, b.username):  # one record per source per minute, so guessing cannot flood the log
+            audit(b.username.strip(), "Sign-in failed", detail=guard.source(request))
         raise HTTPException(401, "wrong username or password")
+    guard.success(request, b.username)
     _login(r, b.username.strip())
-    audit(b.username.strip(), "Signed in", detail=_source(request))
+    audit(b.username.strip(), "Signed in", detail=guard.source(request))
     return {}
 
 
 @app.post("/api/password")
-def change_password(b: PwChange, user: str = Depends(session), homeca: str | None = Cookie(None)):
+def change_password(b: PwChange, request: Request, user: str = Depends(session), homeca: str | None = Cookie(None)):
+    guard.check(request, user)  # a stolen session must not be able to guess the current password
     with db() as c:
-        if not _check_admin(c, user, b.current):
-            time.sleep(1)
-            raise HTTPException(403, "current password is wrong")  # not 401: that means "session expired" to the UI
-        if user == setting(c,"admin_user"):_set_admin(c,user,b.new)
-        else:accounts.save_password(c,user,b.new)
+        ok = _check_admin(c, user, b.current)
+        if ok:
+            if user == setting(c,"admin_user"):_set_admin(c,user,b.new)
+            else:accounts.save_password(c,user,b.new)
+    if not ok:  # outside the transaction: the audit entry needs its own connection and must not be rolled back
+        if guard.fail(request, user):
+            audit(user, "Password change refused", detail=guard.source(request))
+        raise HTTPException(403, "current password is wrong")  # not 401: that means "session expired" to the UI
+    guard.success(request, user)
     for t in [t for t in SESSIONS if t != homeca and SESSIONS[t] == user]:  # sign out everywhere else
         del SESSIONS[t]
     audit(user, "Password changed")

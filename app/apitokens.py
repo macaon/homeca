@@ -4,7 +4,6 @@ private keys, issuing, revoking, deleting, settings and token management stay be
 import hashlib
 import secrets
 import sqlite3
-import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Cookie, Depends, HTTPException, Request
@@ -12,11 +11,12 @@ from pydantic import BaseModel, Field
 
 from . import accounts
 from .auditlog import audit
+from .home_security import LoginGuard
 from .store import db
 
 SCOPES = [("read", "Read", "Read the certificate summary: counts, authority expiry, revocation list freshness and "
                            "which certificates need attention. Cannot download keys or change anything.")]
-INVALID: dict[str, list[float]] = {}  # recent invalid token attempts per source
+token_guard = LoginGuard()  # invalid token attempts per source; register() gives it the trusted proxies
 
 
 def iso_now(offset=timedelta()):
@@ -34,12 +34,8 @@ def token_actor(request, raw):
     with db() as c:
         row = c.execute("SELECT * FROM api_tokens WHERE token_hash=?", (digest(raw),)).fetchone()
         if not row or (row["expires"] and row["expires"] <= iso_now()) or not accounts.exists(c, row["owner"]):
-            source = request.client.host if request.client else ""
-            now = time.monotonic()
-            recent = [t for t in INVALID.get(source, []) if now - t < 300]
-            if len(recent) >= 10:
-                raise HTTPException(429, "Too many invalid tokens. Try again in five minutes.")
-            INVALID[source] = recent + [now]
+            token_guard.check(request, "api-token")
+            token_guard.fail(request, "api-token")
             raise HTTPException(401, "Invalid or expired API token")
         c.execute("UPDATE api_tokens SET last_used=? WHERE id=? AND (last_used IS NULL OR last_used<?)",
                   (iso_now(), row["id"], iso_now(-timedelta(seconds=60))))
@@ -52,9 +48,11 @@ class TokenIn(BaseModel):
     expires_days: int | None = Field(default=None, ge=1, le=3650)
 
 
-def register(app, session):
+def register(app, session, trusted_proxies=()):
     """Adds the token routes (administrator login only) and returns `read`, the dependency for routes that
     accept an administrator session or a bearer token. A bearer header never falls back to the session cookie."""
+
+    token_guard.networks = tuple(trusted_proxies)
 
     def read(request: Request, homeca: str | None = Cookie(None)):
         header = request.headers.get("authorization", "")

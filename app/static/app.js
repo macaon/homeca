@@ -231,7 +231,7 @@ function setKind(k) {
   $("cn-label").textContent = name; $("cn-help").setAttribute("aria-label", "Help: " + name);
   $("cn-hint").textContent = ca
     ? "A display name for this CA, shown in trust stores and in the certificate list. It isn't a hostname. Example: Home Root CA."
-    : "Usually the main hostname. Clients match on the Subject alternative names below, so list every name there too.";
+    : "Usually the main hostname. Clients match on the Subject alternative names, and server certificates get this name added there automatically, so list only the additional names below.";
   $("cn-hint").hidden = true; $("cn-help").setAttribute("aria-expanded", "false");
   const cas = certs.filter((c) => c.kind !== "leaf" && c.status === "valid" || c.kind !== "leaf" && c.status === "expiring");
   const ok = k === "intermediate" ? cas.filter((c) => c.kind === "root" || c.kind === "intermediate") : cas;

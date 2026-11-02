@@ -20,7 +20,7 @@ from .ca import (cert_of, chain, hash_pw, iso, key_of, now, parse, revoke_cert, 
                  status_of, store_cert, urls, write_crl)
 from . import ca, preferences
 from .store import db
-from . import accounts, auditlog
+from . import accounts, apitokens, auditlog
 from .auditlog import audit
 
 SECURE = os.environ.get("HOMECA_SECURE_COOKIE") == "1"
@@ -115,6 +115,7 @@ def _check_admin(c, user, pw):
 
 accounts.register(app,session,SESSIONS,_set_admin)
 auditlog.register(app,session)
+read = apitokens.register(app, session)  # session or read-only API token
 FAILURES: dict[str, float] = {}  # one audit entry per source per minute, so guessing cannot flood the log
 
 
@@ -388,10 +389,8 @@ class SignCsr(BaseModel):
     usage: str = "server"
 
 
-@app.get("/api/certs")
-def list_certs(_: str = Depends(session)):
-    with db() as c:
-        rows = c.execute("SELECT * FROM certs").fetchall()
+def cert_list(c):
+    rows = c.execute("SELECT * FROM certs").fetchall()
     out = []
     meta = {r["id"]: json.loads(r["params"]) for r in rows}
     # Certificates for the same name only supersede each other within the same origin: homeca's own
@@ -407,6 +406,35 @@ def list_certs(_: str = Depends(session)):
                     "sans": p.get("sans", []), "has_key": bool(r["key_enc"]), "crl_next": r["crl_next"],
                     "acme": bool(p.get("acme")), "self": bool(p.get("self"))})
     return out
+
+
+@app.get("/api/certs")
+def list_certs(_: str = Depends(session)):
+    with db() as c:
+        return cert_list(c)
+
+
+@app.get("/api/summary")
+def summary(_: str = Depends(read)):
+    """What a dashboard needs and nothing more: counts, authority expiry and CRL freshness, and the certificates
+    that need attention (the same rule as the UI's Needs attention box). No keys, PEM data, SANs or serials."""
+    with db() as c:
+        certs, acme_ca = cert_list(c), ca.acme_ca(c)
+    live = [x for x in certs if x["status"] != "revoked" and not x["superseded"]]
+    stamp = now()
+    attention = sorted((x for x in live if x["status"] in ("expiring", "expired")), key=lambda x: x["days_left"])
+    return {
+        "roots": sum(x["kind"] == "root" for x in certs), "intermediates": sum(x["kind"] == "intermediate" for x in certs),
+        "active_leaves": sum(x["kind"] == "leaf" and x["status"] != "expired" for x in live),
+        "expiring": sum(x["status"] == "expiring" for x in live), "expired": sum(x["status"] == "expired" for x in live),
+        "revoked": sum(x["status"] == "revoked" for x in certs),
+        "authorities": [{"kind": x["kind"], "cn": x["cn"], "status": x["status"], "days_left": x["days_left"],
+                         "crl_next": x["crl_next"], "crl_overdue": bool(x["crl_next"] and parse(x["crl_next"]) < stamp)}
+                        for x in live if x["kind"] != "leaf"],
+        "attention": [{"cn": x["cn"], "kind": x["kind"], "status": x["status"], "days_left": x["days_left"], "acme": x["acme"]}
+                      for x in attention[:20]],
+        "acme": {"enabled": bool(acme_ca and acme.CLIENTS), "ca": acme_ca["cn"] if acme_ca else None},
+    }
 
 
 @app.get("/api/certs/{id}")

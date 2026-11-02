@@ -16,7 +16,8 @@ async function api(path, method = "GET", body) {
 // ---------- shared HomeUI chrome ----------
 HomeUI.dropdown($("account-btn"), $("account-panel"));
 $("settings-btn").innerHTML = HomeUI.icon("settings");
-const settingsTabs = HomeUI.tabs($("settings-tabs"),{onChange:id=>{if(id==="access-tab"){accountsView.refresh();auditList().catch(error=>toast(error.message,true));}}});
+const settingsTabs = HomeUI.tabs($("settings-tabs"),{onChange:id=>{if(id==="access-tab"){accountsView.refresh();tokenView.load().catch(()=>{});auditList().catch(error=>toast(error.message,true));}}});
+const tokenView=HomeTokens.mount($("api-tokens"),{api,intro:"API tokens let a dashboard or monitor read the certificate summary without signing in. They are read-only: a token can never download a private key, issue, revoke or change anything, and it never sees certificate contents. Each token belongs to an administrator and can be revoked at any time."});
 const accountsView=HomeAccounts.mount($("account-users"),{api,notify:message=>toast(message)});
 let auditOldest=null;
 async function auditList(more=false){

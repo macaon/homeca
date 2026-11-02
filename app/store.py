@@ -14,6 +14,10 @@ CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY, ts TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL,
   target TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS api_tokens (
+  id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, token_hash TEXT UNIQUE NOT NULL, scope TEXT NOT NULL,
+  owner TEXT NOT NULL, created TEXT NOT NULL, expires TEXT, last_used TEXT
+);
 CREATE TABLE IF NOT EXISTS certs (
   id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES certs(id), kind TEXT NOT NULL,
   cn TEXT, serial TEXT, not_before TEXT, not_after TEXT,

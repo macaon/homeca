@@ -168,6 +168,7 @@ if the old key may be compromised. Intermediates and roots cannot be renewed; cr
 - Optional **OIDC/Keycloak login** is configured under **Server settings → OAuth / OIDC**. Local login stays available so an identity-provider outage or expired certificate cannot prevent CA recovery.
 - Only explicitly allowed usernames or verified email addresses may use SSO. They use named administrator accounts with full access, including private-key downloads. The original local administrator remains the protected recovery account. Saved provider secrets are encrypted using a separate key derived from the existing master key.
 - Public unauthenticated endpoints: `/crl/<id>.crl`, `/ca/<id>.crt`, `/ca/<id>.pem`.
+- **API tokens** (Server settings → Access → API tokens) let a dashboard or monitor read `GET /api/summary` without a login. There is one level, **Read**, and it opens that one route: a token can never download a private key, list or fetch certificates, issue, renew, revoke or delete anything, change settings, read the audit log or manage tokens. Tokens belong to an administrator, are stored only as a SHA-256 hash, are shown once, can expire, and stop working when revoked or when their owner is removed. A bearer header never falls back to a login session, and repeated invalid tokens are throttled. Creating and revoking tokens is audited.
 - **Audit log** under **Server settings → Access → Audit** records who did what and when: sign-ins and failures, account and settings changes, every certificate created, signed, renewed, revoked or deleted, downloads of private keys and PKCS#12 bundles, the ACME issuing CA, and what ACME clients and the daily CRL job do (as `ACME client …` and `system`). Entries are kept 90 days (at most 50,000). Failed sign-ins are recorded once per source per minute. Passwords, keys, tokens, provider secrets and certificate contents are never written to it. Downloading public certificates is not recorded.
 
 ### Upgrading from the passphrase version
@@ -200,15 +201,29 @@ All `/api` routes except `state`, `setup` and `login` need the session cookie.
 | `POST /api/certs/{id}/revoke` | Revoke with a reason |
 | `DELETE /api/certs/{id}` | Delete (only if it has issued nothing) |
 | `GET /api/certs/{id}/download?format=pem\|der\|chain\|key\|p12` | Download; `pw_p12` sets the PKCS#12 password |
+| `GET /api/summary` | Dashboard summary (login session **or** a Read API token); see below |
+| `GET /api/tokens`, `POST /api/tokens`, `DELETE /api/tokens/{id}` | Manage API tokens (login session only) |
 | `GET /api/audit?before=&limit=` | Audit entries, newest first (`before` is an entry id; `more` says whether older ones exist) |
 | `GET /api/acme`, `POST /api/acme/ca` | ACME status; choose the issuing intermediate (`{"id": 2}` or `{"id": null}`) |
 | `/acme/*` | The ACME protocol itself (directory, new-account, new-order, ...) |
+
+### Summary for dashboards
+
+    curl -H "Authorization: Bearer homeca_…" https://ca.example.net/api/summary
+
+Returns the numbers the UI's overview shows, plus what needs attention, and nothing that identifies a key or certificate body:
+
+- `roots`, `intermediates`, `active_leaves`, `expiring` (30 days or less), `expired`, `revoked`. Superseded leaves (renewed since) are ignored, as in the UI.
+- `authorities`: for each root and intermediate, its common name, `status`, `days_left`, when its CRL is next due (`crl_next`) and `crl_overdue`.
+- `attention`: up to 20 non-revoked, non-superseded certificates that are expiring or expired, with common name, `days_left` and whether ACME issued them. This is the one place a name of an issued certificate appears; SANs, serial numbers, PEM data and keys never do.
+- `acme`: whether ACME is enabled and the issuing CA's name.
 
 ## Layout
 
     app/pki.py       X.509 building (keys, profiles, CRL, PKCS#12)
     app/ca.py        shared CA operations: master key, storage, CRLs, revocation
     app/auditlog.py  audit log: who did what, and GET /api/audit
+    app/apitokens.py read-only API tokens: management routes and the session-or-token dependency
     app/acme.py      ACME server (RFC 8555, HTTP-01)
     app/main.py      FastAPI routes, auth, public CRL/CA endpoints
     app/__main__.py  entry point: HTTP :8080 and the HTTPS ACME listener with live certificate reload

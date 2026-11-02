@@ -116,6 +116,7 @@ def register(app, session, sessions, set_primary_password):
             if not row:raise HTTPException(404,"User not found")
             c.execute("INSERT OR REPLACE INTO blocked_users(username,subject) VALUES (?,?)",(username,row['subject']))
             c.execute("DELETE FROM users WHERE username=?",(username,))
+            c.execute("DELETE FROM api_tokens WHERE owner=?",(username,))  # a token never outlives the administrator who made it
         revoke(username)
         audit(user,"User removed",username,"sessions revoked")
         return {"ok":True}

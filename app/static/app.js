@@ -16,8 +16,16 @@ async function api(path, method = "GET", body) {
 // ---------- shared HomeUI chrome ----------
 HomeUI.dropdown($("account-btn"), $("account-panel"));
 $("settings-btn").innerHTML = HomeUI.icon("settings");
-const settingsTabs = HomeUI.tabs($("settings-tabs"),{onChange:id=>{if(id==="access-tab")accountsView.refresh();}});
+const settingsTabs = HomeUI.tabs($("settings-tabs"),{onChange:id=>{if(id==="access-tab"){accountsView.refresh();auditList().catch(error=>toast(error.message,true));}}});
 const accountsView=HomeAccounts.mount($("account-users"),{api,notify:message=>toast(message)});
+let auditOldest=null;
+async function auditList(more=false){
+  const data=await api("/api/audit"+(more&&auditOldest?"?before="+auditOldest:""));
+  const rows=data.entries.map(e=>`<div class="hui-list-row"><div class="hui-list-main"><strong>${esc(e.action)}${e.target?" · "+esc(e.target):""}</strong><div class="hui-small">${esc(e.actor)} · <time datetime="${esc(e.ts)}">${esc(new Date(e.ts).toLocaleString())}</time>${e.detail?" · "+esc(e.detail):""}</div></div></div>`).join("");
+  $("audit-list").innerHTML=(more?$("audit-list").innerHTML:"")+(rows||(more?"":'<p class="hui-small">No activity recorded yet.</p>'));
+  if(data.entries.length)auditOldest=data.entries.at(-1).id;$("audit-more").hidden=!data.more;
+}
+$("audit-more").onclick=async()=>{try{await auditList(true);}catch(error){toast(error.message,true);}};
 $("oidc-open-trust").onclick=()=>settingsTabs.select("trust-tab");
 const trustView=HomeTrust.mount($("outbound-trust"),{api,scope:'Additional outbound trust for HomeCA, currently used by OIDC. This is separate from the CA hierarchy and certificates HomeCA issues.'});
 let defaultTheme = "auto";

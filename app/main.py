@@ -20,7 +20,8 @@ from .ca import (cert_of, chain, hash_pw, iso, key_of, now, parse, revoke_cert, 
                  status_of, store_cert, urls, write_crl)
 from . import ca, preferences
 from .store import db
-from . import accounts
+from . import accounts, auditlog
+from .auditlog import audit
 
 SECURE = os.environ.get("HOMECA_SECURE_COOKIE") == "1"
 STATIC = Path(__file__).parent / "static"
@@ -39,6 +40,7 @@ async def _daily():
             await asyncio.to_thread(ca.refresh_crls)
         except Exception as e:  # keep the loop alive; the dashboard shows CRL expiry
             print("CRL refresh failed:", e, flush=True)
+            audit("system", "CRL refresh failed", detail=str(e)[:200])
         await asyncio.sleep(86400)
 
 
@@ -112,6 +114,12 @@ def _check_admin(c, user, pw):
 
 
 accounts.register(app,session,SESSIONS,_set_admin)
+auditlog.register(app,session)
+FAILURES: dict[str, float] = {}  # one audit entry per source per minute, so guessing cannot flood the log
+
+
+def _source(request: Request) -> str:
+    return request.client.host if request.client else ""
 
 
 def _local_account(username):
@@ -131,23 +139,28 @@ def state(homeca: str | None = Cookie(None)):
 
 
 @app.post("/api/setup")
-def setup(b: Login, r: Response):
+def setup(b: Login, r: Response, request: Request):
     with db() as c:
         if setting(c, "admin_hash") is not None:
             raise HTTPException(409, "already set up")
         _set_admin(c, b.username.strip(), b.password)
     _login(r, b.username.strip())
+    audit(b.username.strip(), "Administrator created", detail=_source(request))
     return {}
 
 
 @app.post("/api/login")
-def login(b: Login, r: Response):
+def login(b: Login, r: Response, request: Request):
     with db() as c:
         ok = _check_admin(c, b.username.strip(), b.password)
     if not ok:
+        if time.monotonic() - FAILURES.get(_source(request), -60) >= 60:
+            FAILURES[_source(request)] = time.monotonic()
+            audit(b.username.strip(), "Sign-in failed", detail=_source(request))
         time.sleep(1)
         raise HTTPException(401, "wrong username or password")
     _login(r, b.username.strip())
+    audit(b.username.strip(), "Signed in", detail=_source(request))
     return {}
 
 
@@ -161,6 +174,7 @@ def change_password(b: PwChange, user: str = Depends(session), homeca: str | Non
         else:accounts.save_password(c,user,b.new)
     for t in [t for t in SESSIONS if t != homeca and SESSIONS[t] == user]:  # sign out everywhere else
         del SESSIONS[t]
+    audit(user, "Password changed")
     return {}
 
 
@@ -216,6 +230,7 @@ async def login_oidc(request: Request):
 
 @app.get("/auth/callback", name="oidc_callback")
 async def oidc_callback(request: Request):
+    info = {}
     try:
         provider, options = preferences.runtime()
         if not provider or request.session.pop('provider_config', None) != ca.hash_pw(json.dumps(options, sort_keys=True), b'homeca oidc config'):
@@ -230,8 +245,11 @@ async def oidc_callback(request: Request):
             user = accounts.sso_user(c, info, options, legacy or "")
         response = RedirectResponse('/')
         _login(response, user)
+        audit(user, "Signed in", detail="SSO")
         return response
     except Exception as error:
+        if isinstance(error, HTTPException) and error.status_code == 403:
+            audit(info.get("preferred_username") or info.get("email") or "unknown", "SSO sign-in refused", detail=str(error.detail)[:200])
         return oidc_failure(error)
 
 
@@ -254,6 +272,7 @@ async def save_interface_settings(b: InterfaceSettings, request: Request, user: 
         raise HTTPException(400, "choose Auto, Light or Dark")
     with db() as c:
         set_setting(c, "ui_theme", b.theme)
+    audit(user, "Interface settings changed", detail="default appearance: " + b.theme)
     return {"theme": b.theme}
 
 
@@ -278,6 +297,7 @@ def server_settings(request: Request, user: str = Depends(session)):
 @app.put('/api/settings/oidc')
 def save_oidc(body: OIDCSettings, request: Request, user: str = Depends(session)):
     preferences.update_oidc(body)
+    audit(user, 'OIDC settings changed', detail='enabled' if body.enabled else 'disabled')  # never the secret
     return {'settings':server_settings(request, user)}
 
 
@@ -294,6 +314,7 @@ def list_trust(user: str = Depends(session)):
 @app.post('/api/settings/trust')
 def upload_trust(body: TrustUpload, user: str = Depends(session)):
     count = preferences.add_trust(body.name, body.certificate)
+    audit(user, 'Trust certificate added', body.name.strip(), f'{count} certificate(s)')
     return {'added':count, 'certificates':preferences.public_trust()}
 
 
@@ -304,8 +325,10 @@ def remove_trust(fingerprint: str, user: str = Depends(session)):
         remaining = [entry for entry in entries if entry['fingerprint'] != fingerprint]
         if len(entries) == len(remaining):
             raise HTTPException(404, 'Certificate not found')
+        removed = next(entry for entry in entries if entry['fingerprint'] == fingerprint)
         set_setting(c, 'trusted_certificates', json.dumps(remaining))
     preferences.provider.cache_clear()
+    audit(user, 'Trust certificate removed', str(removed.get('name', ''))[:80], fingerprint[:16])
     return {}
 
 
@@ -402,7 +425,7 @@ def get_cert(id: int, _: str = Depends(session)):
 
 
 @app.post("/api/certs")
-def create(b: NewCert, _: str = Depends(session)):
+def create(b: NewCert, user: str = Depends(session)):
     if (b.kind == "root") != (b.parent_id is None):
         raise HTTPException(400, "root has no parent; intermediate/leaf need one")
     if b.key_type not in pki.KEY_TYPES:
@@ -410,11 +433,13 @@ def create(b: NewCert, _: str = Depends(session)):
     params = b.model_dump(exclude={"parent_id", "days"})
     key = pki.gen_key(b.key_type)
     with db() as c:
-        return {"id": _issue(c, b.kind, b.parent_id, b.subject, key.public_key(), key, params, b.days)}
+        cid = _issue(c, b.kind, b.parent_id, b.subject, key.public_key(), key, params, b.days)
+    audit(user, "Certificate created", b.subject.get("cn", ""), f"{b.kind} · certificate {cid}")
+    return {"id": cid}
 
 
 @app.post("/api/certs/sign-csr")
-def sign_csr(b: SignCsr, _: str = Depends(session)):
+def sign_csr(b: SignCsr, user: str = Depends(session)):
     try:
         csr, subject, csr_sans = pki.csr_info(b.csr_pem)
     except ValueError as e:
@@ -422,11 +447,13 @@ def sign_csr(b: SignCsr, _: str = Depends(session)):
     sans = csr_sans if b.sans is None else b.sans
     params = {"subject": subject, "sans": sans, "usage": b.usage, "csr": True}
     with db() as c:
-        return {"id": _issue(c, "leaf", b.parent_id, subject, csr.public_key(), None, params, b.days)}
+        cid = _issue(c, "leaf", b.parent_id, subject, csr.public_key(), None, params, b.days)
+    audit(user, "Certificate signed from CSR", subject.get("cn", ""), f"certificate {cid}")
+    return {"id": cid}
 
 
 @app.post("/api/certs/{id}/renew")
-def renew(id: int, _: str = Depends(session)):
+def renew(id: int, user: str = Depends(session)):
     with db() as c:
         r = row(c, id)
         if r["kind"] != "leaf":
@@ -438,7 +465,9 @@ def renew(id: int, _: str = Depends(session)):
         # new key if we hold one; CSR-signed certs keep the device's public key
         key = pki.gen_key(p["key_type"]) if r["key_enc"] else None
         pub = key.public_key() if key else cert_of(r).public_key()
-        return {"id": _issue(c, "leaf", r["parent_id"], p["subject"], pub, key, p, max(days, 1))}
+        cid = _issue(c, "leaf", r["parent_id"], p["subject"], pub, key, p, max(days, 1))
+    audit(user, "Certificate renewed", p["subject"].get("cn", ""), f"certificate {id} replaced by {cid}")
+    return {"id": cid}
 
 
 class Revoke(BaseModel):
@@ -446,25 +475,29 @@ class Revoke(BaseModel):
 
 
 @app.post("/api/certs/{id}/revoke")
-def revoke(id: int, b: Revoke, _: str = Depends(session)):
+def revoke(id: int, b: Revoke, user: str = Depends(session)):
     if b.reason not in pki.REASONS:
         raise HTTPException(400, "bad reason")
     with db() as c:
+        cn = row(c, id)["cn"]
         revoke_cert(c, id, b.reason)
+    audit(user, "Certificate revoked", cn, f"certificate {id} · {b.reason}")
     return {}
 
 
 @app.delete("/api/certs/{id}")
-def delete(id: int, _: str = Depends(session)):
+def delete(id: int, user: str = Depends(session)):
     with db() as c:
+        cn = row(c, id)["cn"]
         if c.execute("SELECT 1 FROM certs WHERE parent_id=?", (id,)).fetchone():
             raise HTTPException(409, "has issued certificates; delete those first")
         c.execute("DELETE FROM certs WHERE id=?", (id,))
+    audit(user, "Certificate deleted", cn, f"certificate {id}")
     return {}
 
 
 @app.get("/api/certs/{id}/download")
-def download(id: int, format: str = "pem", pw_p12: str = "", _: str = Depends(session)):
+def download(id: int, format: str = "pem", pw_p12: str = "", user: str = Depends(session)):
     PEM = serialization.Encoding.PEM
     with db() as c:
         r = row(c, id)
@@ -484,6 +517,9 @@ def download(id: int, format: str = "pem", pw_p12: str = "", _: str = Depends(se
             mt, ext = "application/x-pkcs12", "p12"
         else:
             raise HTTPException(400, "bad format")
+        cn = r["cn"]
+    if format in ("key", "p12"):  # only downloads that carry the private key are recorded
+        audit(user, "Private key downloaded" if format == "key" else "PKCS#12 bundle downloaded", cn, f"certificate {id}")
     return Response(body, media_type=mt, headers={"Content-Disposition": f'attachment; filename="{name}.{ext}"'})
 
 
@@ -499,10 +535,11 @@ def acme_status(_: str = Depends(session)):
 
 
 @app.post("/api/acme/ca")
-def acme_set_ca(b: AcmeCa, _: str = Depends(session)):
+def acme_set_ca(b: AcmeCa, user: str = Depends(session)):
     with db() as c:
         if b.id is None:
             set_setting(c, "acme_ca_id", "")
+            audit(user, "ACME issuing CA changed", "none (ACME disabled)", c=c)
         else:
             r = row(c, b.id)
             if r["kind"] != "intermediate" or r["revoked_at"] or parse(r["not_after"]) <= now():
@@ -512,6 +549,7 @@ def acme_set_ca(b: AcmeCa, _: str = Depends(session)):
                 raise HTTPException(400, f"this CA's name constraints don't permit {host}, "
                                          "which homeca needs for its own TLS certificate")
             set_setting(c, "acme_ca_id", str(b.id))
+            audit(user, "ACME issuing CA changed", r["cn"], f"certificate {b.id}", c=c)
         return acme.status(ca.acme_ca(c))
 
 

@@ -9,6 +9,7 @@ import time
 import uvicorn
 
 from . import acme, ca, pki
+from .auditlog import audit
 from .main import app
 from .store import DATA, db
 
@@ -36,6 +37,7 @@ def ensure_tls():
             cur = ca.row(c, ca.store_cert(c, "leaf", issuer["id"], cert, key,
                                           {"subject": {"cn": acme.HOSTNAME}, "sans": [acme.HOSTNAME], "usage": "server",
                                            "key_type": "ec256", "self": True}))
+            audit("system", "HomeCA HTTPS certificate issued", acme.HOSTNAME, f"certificate {cur['id']}", c=c)
         pem = "".join(x.public_bytes(pki.serialization.Encoding.PEM).decode()
                       for x in [ca.cert_of(cur), *ca.chain(c, cur)[:-1]])  # leaf + intermediates, no root
         key_pem = pki.key_pem(ca.key_of(cur))

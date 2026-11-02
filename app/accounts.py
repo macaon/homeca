@@ -5,6 +5,7 @@ import secrets
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 from .store import db
+from .auditlog import audit
 from .ca import hash_pw, setting
 
 
@@ -85,13 +86,14 @@ def register(app, session, sessions, set_primary_password):
             return [{"username":r['username'],"local":bool(r['password']),"primary":r['username']==primary,"admin":True} for r in c.execute("SELECT * FROM users ORDER BY username")]
 
     @app.post("/api/users")
-    def add_user(body:UserIn,_=Depends(session)):
+    def add_user(body:UserIn,user=Depends(session)):
         with db() as c:
             c.execute("BEGIN IMMEDIATE")
             ensure(c)
             if c.execute("SELECT 1 FROM users WHERE username=?",(body.username,)).fetchone():raise HTTPException(409,"Username already exists")
             save_password(c,body.username,body.password)
             c.execute("DELETE FROM blocked_users WHERE username=?",(body.username,))
+        audit(user,"User added",body.username)
         return {"ok":True}
 
     @app.put("/api/users/{username}/password")
@@ -102,6 +104,7 @@ def register(app, session, sessions, set_primary_password):
             if username==setting(c,"admin_user"):set_primary_password(c,username,body.password)
             else:save_password(c,username,body.password)
         revoke(username)
+        audit(user,"Password reset",username,"sessions revoked")
         return {"ok":True}
 
     @app.delete("/api/users/{username}")
@@ -114,4 +117,5 @@ def register(app, session, sessions, set_primary_password):
             c.execute("INSERT OR REPLACE INTO blocked_users(username,subject) VALUES (?,?)",(username,row['subject']))
             c.execute("DELETE FROM users WHERE username=?",(username,))
         revoke(username)
+        audit(user,"User removed",username,"sessions revoked")
         return {"ok":True}

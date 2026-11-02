@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import HTTPException
 
 from . import pki
+from .auditlog import audit
 from .store import db
 
 PUBLIC_URL = os.environ.get("HOMECA_PUBLIC_URL", "").rstrip("/")
@@ -139,6 +140,7 @@ def refresh_crls():
         for r in c.execute("SELECT * FROM certs WHERE kind!='leaf' AND revoked_at IS NULL").fetchall():
             if parse(r["not_after"]) > now() and (not r["crl_next"] or (parse(r["crl_next"]) - now()).days < CRL_DAYS // 2):
                 write_crl(c, r)
+                audit("system", "CRL refreshed", r["cn"], f"certificate {r['id']}", c=c)
 
 
 def revoke_cert(c, id, reason="unspecified"):

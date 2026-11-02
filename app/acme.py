@@ -23,6 +23,7 @@ from fastapi import APIRouter, Body, Depends, Request, Response
 from fastapi.responses import JSONResponse
 
 from . import ca, pki
+from .auditlog import audit
 from .store import db
 
 CLIENTS = [ipaddress.ip_network(x.strip(), strict=False)
@@ -274,6 +275,7 @@ def new_account(request: Request, body: dict = Body(...)):
                             (json.dumps(jwk), tp, json.dumps(contact), ca.iso(ca.now())))
             a = c.execute("SELECT * FROM acme_accounts WHERE id=?", (cur.lastrowid,)).fetchone()
             created = True
+            audit(f"ACME client {request.client.host if request.client else ''}", "ACME account registered", detail=f"account {a['id']}", c=c)
         else:
             created = False
     return reply(request, account_obj(request, a), 201 if created else 200, Location=url(request, "acct", a["id"]))
@@ -388,6 +390,8 @@ def finalize(id: str, request: Request, body: dict = Body(...)):
                             {"subject": {"cn": names[0]}, "sans": names, "usage": "server", "acme": True,
                              "account": acct["id"]})
         c.execute("UPDATE acme_orders SET status='valid', cert_id=? WHERE id=?", (cid, id))
+        audit(f"ACME account {acct['id']}", "Certificate issued", names[0],
+              f"ACME · certificate {cid} · {request.client.host if request.client else ''}", c=c)
         obj = order_obj(request, c, own_order(c, id, acct))
     return reply(request, obj, Location=url(request, "order", id))
 
@@ -427,7 +431,10 @@ def revoke_cert(request: Request, body: dict = Body(...)):
             raise AcmeError("unauthorized", "not authorized to revoke this certificate", 403)
         if r["revoked_at"]:
             raise AcmeError("alreadyRevoked", "certificate is already revoked")
-        ca.revoke_cert(c, r["id"], REASON_CODES.get(payload.get("reason"), "unspecified"))
+        reason = REASON_CODES.get(payload.get("reason"), "unspecified")
+        ca.revoke_cert(c, r["id"], reason)
+        audit(f"ACME account {acct['id']}" if acct else "ACME certificate key", "Certificate revoked", r["cn"],
+              f"ACME · certificate {r['id']} · {reason}", c=c)
     return Response(status_code=200, headers={"Replay-Nonce": new_nonce(), "Cache-Control": "no-store"})
 
 

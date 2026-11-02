@@ -174,6 +174,9 @@ def test_full_flow(ui, monkeypatch):
     assert row["acme"] and not row["has_key"]
     assert ui.post(f"/api/certs/{row['id']}/renew").status_code == 400  # ACME certs renew via ACME
     S["leaf_id"] = row["id"]
+    log = {e["action"]: e for e in ui.get("/api/audit?limit=200").json()["entries"]}  # protocol events are audited too
+    assert log["ACME account registered"]["actor"] == "ACME client 10.1.1.5"
+    assert log["Certificate issued"]["target"] == "nas.home.arpa" and log["Certificate issued"]["actor"].startswith("ACME account ")
 
 
 def test_rejections(monkeypatch):
@@ -213,6 +216,8 @@ def test_revoke(ui):
     entry = crl.get_revoked_certificate_by_serial_number(leaf.serial_number)
     assert entry is not None and entry.extensions.get_extension_for_class(x509.CRLReason).value.reason == x509.ReasonFlags.superseded
     assert next(x for x in ui.get("/api/certs").json() if x["id"] == S["leaf_id"])["status"] == "revoked"
+    revoked = [e for e in ui.get("/api/audit?limit=200").json()["entries"] if e["action"] == "Certificate revoked"]
+    assert revoked and revoked[0]["target"] == "nas.home.arpa" and "ACME" in revoked[0]["detail"]
 
 
 def test_self_tls_cert():
@@ -223,6 +228,8 @@ def test_self_tls_cert():
     assert leaf.subject.rfc4514_string() == "CN=ca.home.arpa"
     assert oct(os.stat(key).st_mode & 0o777) == "0o600"
     serialization.load_pem_private_key(Path(key).read_bytes(), None)
+    with main.db() as c:
+        assert c.execute("SELECT count(*) FROM audit WHERE actor='system' AND action='HomeCA HTTPS certificate issued'").fetchone()[0] == 1
 
 
 def test_same_name_certs_stay_independent(ui, monkeypatch):

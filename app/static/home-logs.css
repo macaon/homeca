@@ -1,0 +1,20 @@
+/* Shared logs dialog. Scoped to the component; do not override per app. */
+[data-home-logs]{display:block;margin:0;padding:0;color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+[data-home-logs] *{box-sizing:border-box}[data-home-logs] [hidden]{display:none!important}
+[data-home-logs] .hl-dialog{width:min(760px,calc(100vw - 32px));max-height:85dvh;overflow:auto;padding:22px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+[data-home-logs] .hl-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 16px}
+[data-home-logs] .hl-head h2{margin:0;font-size:17px;line-height:1.5;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text)}
+[data-home-logs] button{display:inline-flex;align-items:center;justify-content:center;gap:6px;margin:0;padding:7px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:400 15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;cursor:pointer}
+[data-home-logs] button:hover{background:var(--hover)}[data-home-logs] button:disabled{opacity:.5;cursor:default}
+[data-home-logs] button.hl-close{width:36px;height:36px;padding:7px;border-color:transparent;background:transparent;color:var(--muted);font-size:16px}
+[data-home-logs] button.hl-close:hover{background:var(--hover);color:var(--text)}
+[data-home-logs] .hl-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 16px;padding:4px;border-radius:10px;background:var(--line)}
+[data-home-logs] .hl-tabs button{flex:1;border:0;background:transparent;color:var(--muted);white-space:nowrap}
+[data-home-logs] .hl-tabs button[aria-selected=true]{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+[data-home-logs] .hl-help,[data-home-logs] .hl-empty{margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.5}
+[data-home-logs] .hl-list{margin:0;padding:0}[data-home-logs] .hl-list[aria-busy=true]{opacity:.6}
+[data-home-logs] .hl-row{display:block;margin:0;padding:12px 0;border-bottom:1px solid var(--line)}[data-home-logs] .hl-row:last-child{border-bottom:0}
+[data-home-logs] .hl-row strong{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+[data-home-logs] .hl-row span{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+[data-home-logs] .hl-error{margin:12px 0 0;color:var(--bad);font-size:13px}
+[data-home-logs] .hl-actions{display:flex;justify-content:center;margin:16px 0 0}

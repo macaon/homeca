@@ -11,8 +11,10 @@
 <link rel="stylesheet" href="/static/home-login.css?v=20261028-shared-1">
 <link rel="stylesheet" href="/static/home-trust.css?v=20261028-shared-1">
 <link rel="stylesheet" href="/static/home-tokens.css?v=20261102-shared-1">
+<link rel="stylesheet" href="/static/home-logs.css?v=20261102-shared-1">
 <script src="/static/home-trust.js?v=20261028-shared-1"></script>
 <script src="/static/home-tokens.js?v=20261102-shared-1"></script>
+<script src="/static/home-logs.js?v=20261102-shared-1"></script>
 </head>
 <body>
 
@@ -35,6 +37,7 @@
   <header class="hui-header">
     <div class="hui-logo">HomeCA</div>
     <span class="spacer"></span>
+    <button id="logs-btn" class="hui-icon-button"></button>
     <button id="settings-btn" class="hui-icon-button" aria-label="Server settings" title="Server settings"></button>
     <button id="account-btn" aria-haspopup="true" aria-expanded="false">Account ▾</button>
     <div id="account-panel" class="hui-menu">
@@ -63,6 +66,7 @@
 </div>
 
 <dialog id="detail"></dialog>
+<div id="logs"></div>
 
 <dialog id="settings-dialog" aria-labelledby="settings-title">
   <div class="hui-dialog-head"><h2 id="settings-title">Server settings</h2><button type="button" class="hui-icon-button" data-close aria-label="Close settings">✕</button></div>
@@ -76,7 +80,7 @@
     </form>
   </section>
 <section id="settings-trust" role="tabpanel" aria-labelledby="settings-trust-tab" hidden><div id="outbound-trust"></div></section>
-<section id="settings-access" hidden><section id="settings-users" class="hui-access-section"><div id="account-users"></div></section><section class="hui-access-section" id="settings-oidc"><h3 class="hui-access-heading">OAuth / OIDC</h3><form id="oidc-form"><label class="hui-inline"><input id="oidc-enabled" type="checkbox">Enable OpenID Connect login</label><p class="hui-small">Local username/password login remains available. Only explicitly allowed identities can sign in. Allowed identities use named administrator accounts with full access to certificates and private keys.</p><p class="hui-small">For a private identity provider CA, upload its public certificate under <button type="button" class="hui-ghost" id="oidc-open-trust">Trust</button>.</p><label>Issuer or discovery URL<input id="oidc-issuer" type="url" placeholder="https://identity.example.net/realms/example/.well-known/openid-configuration"></label><p class="hui-small">Paste the issuer address or its full .well-known/openid-configuration link. HomeCA discovers the login endpoints automatically; client ID and secret are still required.</p><label>Client ID<input id="oidc-client"></label><label>Client secret <small id="oidc-secret-hint"></small><input id="oidc-secret" type="password" autocomplete="new-password"></label><label>Allowed usernames or emails <small>required, comma separated; usernames or verified email addresses</small><input id="oidc-allowed"></label><p class="hui-small">Register this redirect URI with your provider: <code id="oidc-callback"></code></p><p class="hui-error" id="oidc-error" role="alert"></p><div class="hui-dialog-foot"><button class="hui-primary">Save OAuth settings</button></div></form></section><section class="hui-access-section" id="settings-tokens"><h3 class="hui-access-heading">API tokens</h3><div id="api-tokens"></div></section><section class="hui-access-section" id="settings-audit"><h3 class="hui-access-heading">Audit</h3><p class="hui-small">Who did what, newest first: sign-ins, accounts, settings, certificates issued, renewed or revoked, and downloads of private keys. Entries are kept for 90 days. Passwords, keys, secrets and certificate contents are never recorded.</p><div id="audit-list" aria-live="polite"></div><button type="button" id="audit-more" hidden>Load older entries</button></section></section>
+<section id="settings-access" hidden><section id="settings-users" class="hui-access-section"><div id="account-users"></div></section><section class="hui-access-section" id="settings-oidc"><h3 class="hui-access-heading">OAuth / OIDC</h3><form id="oidc-form"><label class="hui-inline"><input id="oidc-enabled" type="checkbox">Enable OpenID Connect login</label><p class="hui-small">Local username/password login remains available. Only explicitly allowed identities can sign in. Allowed identities use named administrator accounts with full access to certificates and private keys.</p><p class="hui-small">For a private identity provider CA, upload its public certificate under <button type="button" class="hui-ghost" id="oidc-open-trust">Trust</button>.</p><label>Issuer or discovery URL<input id="oidc-issuer" type="url" placeholder="https://identity.example.net/realms/example/.well-known/openid-configuration"></label><p class="hui-small">Paste the issuer address or its full .well-known/openid-configuration link. HomeCA discovers the login endpoints automatically; client ID and secret are still required.</p><label>Client ID<input id="oidc-client"></label><label>Client secret <small id="oidc-secret-hint"></small><input id="oidc-secret" type="password" autocomplete="new-password"></label><label>Allowed usernames or emails <small>required, comma separated; usernames or verified email addresses</small><input id="oidc-allowed"></label><p class="hui-small">Register this redirect URI with your provider: <code id="oidc-callback"></code></p><p class="hui-error" id="oidc-error" role="alert"></p><div class="hui-dialog-foot"><button class="hui-primary">Save OAuth settings</button></div></form></section><section class="hui-access-section" id="settings-tokens"><h3 class="hui-access-heading">API tokens</h3><div id="api-tokens"></div></section></section>
 
 </dialog>
 

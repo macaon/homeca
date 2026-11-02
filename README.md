@@ -24,7 +24,7 @@ extensions cannot be forgotten.
 
     openssl rand -base64 32 > master.key
     chown 10001 master.key && chmod 400 master.key     # the container runs as uid 10001
-    $EDITOR compose.yaml                               # set HOMECA_PUBLIC_URL, HOMECA_ACME_* (see below)
+    cp .env.example .env && $EDITOR .env               # set HOMECA_PUBLIC_URL, HOMECA_ACME_* (see below)
     docker compose up --build -d                       # podman compose works too
     open http://localhost:8080
 

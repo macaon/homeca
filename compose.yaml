@@ -11,16 +11,12 @@ services:
     secrets: [master_key]
     environment:
       HOMECA_MASTER_KEY_FILE: /run/secrets/master_key
-      # REQUIRED: where devices reach the plain-HTTP port; baked into every cert issued from now on as its
-      # CRL/CA-issuer URL (existing certs keep the old one). Comma-separate to list several, e.g. a LAN and a VPN name.
-      HOMECA_PUBLIC_URL: http://CHANGE-ME.home.arpa:8080
-      # ACME: the name clients use for this service (it gets its own TLS cert) and who may use it.
-      HOMECA_ACME_HOSTNAME: ca.home.arpa
-      HOMECA_ACME_CLIENTS: 10.1.1.0/24
-      # Your reverse proxy, so sign-in limits and the audit log see real client addresses (see README)
-      # HOMECA_TRUSTED_PROXIES: 172.28.0.1
-      # Set to 1 once the UI is served over HTTPS by your reverse proxy
-      HOMECA_SECURE_COOKIE: "0"
+      # All values come from .env (copy .env.example); see README for what each one means.
+      HOMECA_PUBLIC_URL: ${HOMECA_PUBLIC_URL:?set HOMECA_PUBLIC_URL in .env (copy .env.example)}
+      HOMECA_ACME_HOSTNAME: ${HOMECA_ACME_HOSTNAME:-}
+      HOMECA_ACME_CLIENTS: ${HOMECA_ACME_CLIENTS:-}
+      HOMECA_TRUSTED_PROXIES: ${HOMECA_TRUSTED_PROXIES:-}
+      HOMECA_SECURE_COOKIE: ${HOMECA_SECURE_COOKIE:-0}
     restart: unless-stopped
 
 secrets:

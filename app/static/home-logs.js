@@ -17,7 +17,7 @@ function mount(root,{api,button,tabs=[AUDIT],title='Logs',label='Activity log'})
  if(button){button.innerHTML=ICON;button.setAttribute('aria-label',label);button.title=label;button.setAttribute('aria-haspopup','dialog');}
  let current=tabs[0],oldest=null,generation=0,busy=false;
  const show=message=>{error.textContent=message;error.hidden=!message;};
- const when=value=>HomeUI.formatDate(value);
+ const when=value=>typeof HomeUI!=='undefined'?HomeUI.formatDate(value):new Date(value).toLocaleString();  // home-ui.js is optional
  const rows=entries=>entries.map(e=>`<div class="hl-row"><strong>${escape(e.action)}${e.target?' · '+escape(e.target):''}</strong><span>${escape(e.actor)} · <time datetime="${escape(e.ts)}">${escape(when(e.ts))}</time>${e.detail?' · '+escape(e.detail):''}</span></div>`).join('');
  async function load(older=false){
   if(busy&&older)return;busy=true;const mine=++generation;show('');list.setAttribute('aria-busy','true');more.disabled=true;

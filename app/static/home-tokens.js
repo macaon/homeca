@@ -9,7 +9,7 @@ function mount(root,{api,intro='API tokens let scripts and other services call t
  find('.hk-help').textContent=intro;
  const message=(target,value)=>{target.textContent=value;target.hidden=!value;};
  const fail=reason=>message(error,reason.message||'The request could not be completed.');
- const when=value=>HomeUI.formatDate(value);
+ const when=value=>typeof HomeUI!=='undefined'?HomeUI.formatDate(value):new Date(value).toLocaleString();  // home-ui.js is optional
  let scopes=[],tokens=[],busy=false;
  const label=id=>scopes.find(item=>item.id===id)?.label||id;
  function describe(){create.querySelector('.hk-scope-help').textContent=scopes.find(item=>item.id===form.elements.scope.value)?.description||'';}

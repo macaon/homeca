@@ -81,20 +81,34 @@
   }));
  }
  function confirmValues(form,fields){const d=new FormData(form);return Object.fromEntries(fields.map(f=>[f.name,f.type==='checkbox'?d.has(f.name):f.type==='checkboxes'?d.getAll(f.name):d.get(f.name)??'']));}
+ // With `action` (async): the dialog stays open while it runs, shows a thrown error inline, and closes on success.
  // No `fields`: resolves true/false. With `fields`: resolves {name:value} on confirm, null on cancel/Escape.
  // Field types: text, password, number, url, email, textarea, select, radio, checkbox, checkboxes. See docs/component-api.md.
- function confirmAction(dialog,{title='Remove item',message,confirmLabel='Remove',fields}={}){
+ function confirmAction(dialog,{title='Remove item',message,confirmLabel='Remove',fields,action}={}){
   if(confirmations.has(dialog))throw new Error('Confirmation already open');
   const box=dialog.querySelector('[data-confirm-fields]'),form=dialog.querySelector('form'),accept=dialog.querySelector('[data-confirm-accept]'),cancel=dialog.querySelector('[value="cancel"]');
+  const errorBox=dialog.querySelector('[data-confirm-error]');
   if(fields&&!box)throw new Error('Dialog needs a [data-confirm-fields] element');
+  if(action&&!errorBox)throw new Error('Dialog needs a [data-confirm-error] element');
   confirmations.add(dialog);
   dialog.querySelector('[data-confirm-title]').textContent=title;dialog.querySelector('[data-confirm-message]').textContent=message??'';accept.textContent=confirmLabel;dialog.returnValue='';
   if(box){box.replaceChildren();box.onkeydown=null;}
-  let helper;
+  let helper,busy=false;
+  if(errorBox)errorBox.textContent='';
+  // With `action`, confirming runs it while the dialog stays open: buttons disabled, errors shown inline, input kept.
+  const submit=async e=>{
+   if(e.submitter!==accept)return;e.preventDefault();
+   const label=accept.textContent;busy=true;errorBox.textContent='';accept.disabled=cancel.disabled=true;accept.textContent='Working…';
+   try{await action(fields?confirmValues(form,fields):undefined);dialog.close('confirm');}
+   catch(err){errorBox.textContent=err?.message||String(err);}
+   finally{busy=false;accept.disabled=cancel.disabled=false;accept.textContent=label;}
+  };
+  const noEscape=e=>{if(busy)e.preventDefault();};
+  if(action){form.addEventListener('submit',submit);dialog.addEventListener('cancel',noEscape);}
   if(fields){confirmFields(box,fields);helper=help(box);cancel.formNoValidate=true;box.onkeydown=e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();form.requestSubmit(accept);}};}
   return new Promise(resolve=>{dialog.addEventListener('close',()=>{
    const ok=dialog.returnValue==='confirm',out=fields?(ok?confirmValues(form,fields):null):ok;
-   helper?.destroy();confirmations.delete(dialog);if(box){box.replaceChildren();box.onkeydown=null;}resolve(out);},{once:true});
+   helper?.destroy();if(action){form.removeEventListener('submit',submit);dialog.removeEventListener('cancel',noEscape);}confirmations.delete(dialog);if(box){box.replaceChildren();box.onkeydown=null;}resolve(out);},{once:true});
    dialog.showModal();(fields&&box.querySelector('input,select,textarea')||cancel)?.focus();});
  }
  root.HomeUI=Object.freeze({version:'0.1.0',escape,icon,applyTheme,themeController,dropdown,overflow,tabs,toast,help,formatDate,setDateFormat,confirmAction});

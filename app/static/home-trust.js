@@ -11,7 +11,7 @@ function mount(root,{api,scope='Additional CA certificates for this applicationâ
  const fail=reason=>message(error,reason.message||'The request could not be completed.');
  let busy=false;
  function render(certificates){
-  list.innerHTML=certificates.length?certificates.map(cert=>`<div class="ht-row"><div class="ht-details"><strong>${escape(cert.name)}</strong><span>${escape(cert.subject)}</span><span>Expires ${escape(new Date(cert.expires).toLocaleDateString())}</span><code title="SHA-256 fingerprint">${escape((cert.fingerprint.match(/../g)||[]).join(':'))}</code></div><button type="button" class="ht-danger" data-remove="${escape(cert.fingerprint)}" aria-label="Remove ${escape(cert.name)}">Remove</button></div>`).join(''):'<p class="ht-empty">No additional certificates uploaded.</p>';
+  list.innerHTML=certificates.length?certificates.map(cert=>`<div class="ht-row"><div class="ht-details"><strong>${escape(cert.name)}</strong><span>${escape(cert.subject)}</span><span>Expires ${escape(HomeUI.formatDate(cert.expires,{time:false}))}</span><code title="SHA-256 fingerprint">${escape((cert.fingerprint.match(/../g)||[]).join(':'))}</code></div><button type="button" class="ht-danger" data-remove="${escape(cert.fingerprint)}" aria-label="Remove ${escape(cert.name)}">Remove</button></div>`).join(''):'<p class="ht-empty">No additional certificates uploaded.</p>';
   for(const button of list.querySelectorAll('[data-remove]'))button.onclick=async()=>{
    if(busy)return;busy=true;message(error,'');message(status,'');
    const cert=certificates.find(item=>item.fingerprint===button.dataset.remove);

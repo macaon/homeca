@@ -55,6 +55,16 @@
   scope.addEventListener('click',click);scope.addEventListener('keydown',key);
   return{destroy(){scope.removeEventListener('click',click);scope.removeEventListener('keydown',key);}};
  }
+ // Account date format: 'auto' (browser locale), 'iso' (2026-11-02 14:05:09), 'day' (02/11/2026 14:05:09), 'month' (11/02/2026, 2:05:09 PM).
+ const dateLocales={iso:'sv-SE',day:'en-GB',month:'en-US'};
+ let dateFormat='auto';
+ function setDateFormat(format='auto'){if(format!=='auto'&&!dateLocales[format])throw new Error('Unknown date format');dateFormat=format;}
+ function formatDate(value,{time=true,timeZone}={}){
+  const date=value instanceof Date?value:new Date(value);if(Number.isNaN(date.getTime()))return String(value);
+  const auto=dateFormat==='auto',two='2-digit';
+  const options={timeZone,...(auto?{year:'numeric',month:'short',day:'numeric'}:{year:'numeric',month:two,day:two}),...(time?{hour:two,minute:two,second:two}:{})};
+  return date.toLocaleString(auto?undefined:dateLocales[dateFormat],options).replace(', ',' ');
+ }
  const confirmations=new WeakSet();
  function confirmFields(box,fields){
   const el=(tag,props={},kids=[])=>{const n=document.createElement(tag);Object.assign(n,props);n.append(...kids);return n;};
@@ -87,6 +97,6 @@
    helper?.destroy();confirmations.delete(dialog);if(box){box.replaceChildren();box.onkeydown=null;}resolve(out);},{once:true});
    dialog.showModal();(fields&&box.querySelector('input,select,textarea')||cancel)?.focus();});
  }
- root.HomeUI=Object.freeze({version:'0.1.0',escape,icon,applyTheme,themeController,dropdown,overflow,tabs,toast,help,confirmAction});
+ root.HomeUI=Object.freeze({version:'0.1.0',escape,icon,applyTheme,themeController,dropdown,overflow,tabs,toast,help,formatDate,setDateFormat,confirmAction});
  if(typeof module!=='undefined')module.exports=root.HomeUI;
 })(typeof window!=='undefined'?window:globalThis);

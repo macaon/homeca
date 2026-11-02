@@ -134,12 +134,18 @@ def _local_account(username):
         return bool(row and row['password'])
 
 
+def _preferences(user):
+    """Per-account preferences; accounts that never saved any get the defaults."""
+    return {"date_format": "auto", **((user and preferences.saved("preferences:" + user)) or {})}
+
+
 @app.get("/api/state")
 def state(homeca: str | None = Cookie(None)):
     with db() as c:
         return {"setup_needed": setting(c, "admin_hash") is None, "logged_in": homeca in SESSIONS,
                 "user": SESSIONS.get(homeca), "local": _local_account(SESSIONS.get(homeca)), "sso": preferences.oidc_options()["enabled"],
-                "ui": {"theme": setting(c, "ui_theme") or "auto"}}
+                "ui": {"theme": setting(c, "ui_theme") or "auto"},
+                "date_format": _preferences(SESSIONS.get(homeca))["date_format"]}
 
 
 @app.post("/api/setup")
@@ -265,6 +271,24 @@ async def oidc_callback(request: Request):
 # All authenticated HomeCA sessions are CA administrators, including existing OIDC sessions.
 class InterfaceSettings(BaseModel):
     theme: str
+
+
+class Preferences(BaseModel):
+    date_format: str = Field(pattern="^(auto|iso|day|month)$")
+
+
+@app.get("/api/preferences")
+def get_preferences(user: str = Depends(session)):
+    return _preferences(user)
+
+
+@app.put("/api/preferences")
+def save_preferences(b: Preferences, request: Request, user: str = Depends(session)):
+    if not request.headers.get("content-type", "").split(";")[0].strip().lower() == "application/json":
+        raise HTTPException(415, "JSON required")
+    value = {**_preferences(user), **b.model_dump()}
+    preferences.save("preferences:" + user, value)
+    return value
 
 
 @app.get("/api/settings/interface")

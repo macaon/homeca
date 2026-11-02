@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const lines = (id) => $(id).value.split("\n").map((s) => s.trim()).filter(Boolean);
-const fmtDate = (s) => new Date(s).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+const fmtDate = (s) => HomeUI.formatDate(s, { time: false });
 const KIND = { root: "Root", intermediate: "Intermediate", leaf: "Leaf" };
 let certs = [];
 
@@ -36,6 +36,7 @@ $("settings-btn").onclick = async () => {
   try {
     const settings = await api("/api/settings");
     $("default-theme").value = settings.ui.theme; renderOIDC(settings);
+    $("date-format").value = (await api("/api/preferences")).date_format;
     await trustView.load();
     $("settings-dialog").showModal();
   } catch (error) { toast(error.message, true); }
@@ -54,7 +55,8 @@ $("interface-form").onsubmit = async (event) => {
     const saved = await api("/api/settings/interface", "PUT", {theme: $("default-theme").value});
     defaultTheme = saved.theme;
     HomeUI.applyTheme(defaultTheme);
-    toast("Interface settings saved");
+    HomeUI.setDateFormat((await api("/api/preferences", "PUT", { date_format: $("date-format").value })).date_format);
+    toast("Interface settings saved. Date format is saved to your account.");
   } catch (error) { $("interface-error").textContent = error.message; }
 };
 
@@ -68,6 +70,7 @@ async function init() {
   $("sso-row").hidden = !s.sso || s.setup_needed;
   defaultTheme = s.ui.theme;
   HomeUI.applyTheme(defaultTheme);
+  HomeUI.setDateFormat(s.date_format);
   if (!s.logged_in) document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   if (s.logged_in) { $("pwd-btn").hidden=s.local===false; $("account-btn").textContent = `${s.user} ▾`; return load(); }
   $("pw2-row").hidden = !s.setup_needed;

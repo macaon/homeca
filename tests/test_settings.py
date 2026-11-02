@@ -122,3 +122,11 @@ def test_oidc_callback_rejects_configuration_change(client,monkeypatch):
     options['issuer']='https://different.example.net'
     assert browser.get('/auth/callback',follow_redirects=False).headers['location']=='/?sso_error=failed'
     assert not browser.get('/api/state').json()['logged_in']
+
+
+def test_date_format_is_per_account_and_validated(client):
+    assert client.get('/api/state').json()['date_format'] == 'auto'
+    assert client.put('/api/preferences', json={'date_format':'iso'}).json() == {'date_format':'iso'}
+    assert client.get('/api/state').json()['date_format'] == 'iso'
+    assert client.put('/api/preferences', json={'date_format':'klingon'}).status_code == 422
+    assert TestClient(main.app).get('/api/preferences').status_code == 401

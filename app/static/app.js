@@ -194,23 +194,28 @@ async function show(id) {
   const act = (btn, fn) => ($("detail").querySelector(btn) || {}).onclick = async () => {
     try { await fn(); } catch (e) { $("detail-err").textContent = e.message; }
   };
-  act("#p12", () => {
-    const pw = prompt("Password to protect the .p12 file (many importers require one):");
-    if (pw !== null) location.href = `/api/certs/${id}/download?format=p12&pw_p12=${encodeURIComponent(pw)}`;
+  act("#p12", async () => {
+    const r = await confirmBox({ title: "Export PKCS#12", message: "Many importers require a password on the .p12 file.", confirmLabel: "Download",
+      fields: [{ name: "pw", type: "password", label: "Password" }] });
+    if (r) location.href = `/api/certs/${id}/download?format=p12&pw_p12=${encodeURIComponent(r.pw)}`;
   });
   act("#use-acme", async () => { await api("/api/acme/ca", "POST", { id }); $("detail").close(); load(); });
   act("#renew", async () => { const r = await api(`/api/certs/${id}/renew`, "POST"); await load(); show(r.id); });
   act("#revoke", async () => {
-    const reason = prompt("Reason: unspecified, key_compromise, affiliation_changed, superseded, cessation_of_operation", "unspecified");
-    if (reason) { await api(`/api/certs/${id}/revoke`, "POST", { reason }); await load(); show(id); }
+    const r = await confirmBox({ title: `Revoke "${d.subject}"`, message: "Pick the reason recorded in the CRL. Revocation can't be undone.", confirmLabel: "Revoke",
+      fields: [{ name: "reason", type: "radio", label: "Reason", value: "unspecified", required: true, options: REASONS.map(([value, label]) => ({ value, label })) }] });
+    if (r) { await api(`/api/certs/${id}/revoke`, "POST", { reason: r.reason }); await load(); show(id); }
   });
   act("#del", async () => {
-    if (confirm(`Delete "${d.subject}" and its stored key? This can't be undone.`)) {
+    if (await confirmBox({ title: "Delete certificate", message: `Delete "${d.subject}" and its stored key? This can't be undone.`, confirmLabel: "Delete" })) {
       await api(`/api/certs/${id}`, "DELETE"); $("detail").close(); load();
     }
   });
   $("detail").showModal();
 }
+
+const REASONS = [["unspecified", "Unspecified"], ["key_compromise", "Key compromise"], ["affiliation_changed", "Affiliation changed"], ["superseded", "Superseded"], ["cessation_of_operation", "Cessation of operation"]];
+const confirmBox = (o) => HomeUI.confirmAction($("confirm"), o);
 
 // ---------- new certificate ----------
 const DAYS = { root: 3650, intermediate: 1825, leaf: 365, csr: 365 };

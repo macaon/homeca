@@ -4,3 +4,4 @@ __pycache__/
 master.key
 .pytest_cache/
 .env
+build-push.sh

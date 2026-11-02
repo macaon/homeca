@@ -1,6 +1,6 @@
 services:
   homeca:
-    image: docker.home.arpa/homeca:latest   # `docker compose pull` to deploy without building
+    image: ${HOMECA_IMAGE:-homeca:latest}   # built locally by default; set HOMECA_IMAGE in .env to pull from a registry
     build:
       context: .
       dockerfile: Containerfile

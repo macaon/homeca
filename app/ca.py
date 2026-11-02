@@ -16,7 +16,7 @@ from . import pki
 from .auditlog import audit
 from .store import db
 
-PUBLIC_URL = os.environ.get("HOMECA_PUBLIC_URL", "").rstrip("/")
+PUBLIC_URLS = [u.strip().rstrip("/") for u in os.environ.get("HOMECA_PUBLIC_URL", "").split(",") if u.strip()]
 CRL_DAYS = 30
 _master: bytes | None = None
 
@@ -119,9 +119,8 @@ def chain(c, r):
 
 
 def urls(parent_id):
-    if not PUBLIC_URL:
-        return None, None
-    return f"{PUBLIC_URL}/crl/{parent_id}.crl", f"{PUBLIC_URL}/ca/{parent_id}.crt"
+    return ([f"{u}/crl/{parent_id}.crl" for u in PUBLIC_URLS] or None,
+            [f"{u}/ca/{parent_id}.crt" for u in PUBLIC_URLS] or None)
 
 
 # ---------- revocation ----------

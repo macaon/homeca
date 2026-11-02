@@ -11,8 +11,9 @@ services:
     secrets: [master_key]
     environment:
       HOMECA_MASTER_KEY_FILE: /run/secrets/master_key
-      # Where devices reach the plain-HTTP port; embedded in issued certs as CRL/CA-issuer URLs.
-      HOMECA_PUBLIC_URL: http://ca.home.arpa:8080
+      # REQUIRED: where devices reach the plain-HTTP port; baked into every cert issued from now on as its
+      # CRL/CA-issuer URL (existing certs keep the old one). Comma-separate to list several, e.g. a LAN and a VPN name.
+      HOMECA_PUBLIC_URL: http://CHANGE-ME.home.arpa:8080
       # ACME: the name clients use for this service (it gets its own TLS cert) and who may use it.
       HOMECA_ACME_HOSTNAME: ca.home.arpa
       HOMECA_ACME_CLIENTS: 10.1.1.0/24

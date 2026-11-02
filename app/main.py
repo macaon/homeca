@@ -25,6 +25,9 @@ from .home_security import LoginGuard, parse_networks
 
 SECURE = os.environ.get("HOMECA_SECURE_COOKIE") == "1"
 STATIC = Path(__file__).parent / "static"
+if not ca.PUBLIC_URLS:
+    print("WARNING: HOMECA_PUBLIC_URL is not set; issued certificates will have no CRL or CA-issuer URL, "
+          "so clients cannot check revocation or fetch the chain.", flush=True)
 
 # ---------- legacy deployment defaults; UI settings take precedence ----------
 OIDC_ISSUER = os.environ.get("HOMECA_OIDC_ISSUER")

@@ -71,6 +71,17 @@ def test_server_needs_san():
     raise AssertionError("expected ValueError")
 
 
+def test_multiple_crl_and_aia_urls():
+    rk = pki.gen_key("ec256")
+    root = pki.issue("root", {"cn": "R"}, rk.public_key(), rk, days=30)
+    lk = pki.gen_key("ec256")
+    leaf = pki.issue("leaf", {"cn": "a"}, lk.public_key(), rk, root, 30, sans=["a.home.arpa"],
+                     cdp=["http://a/crl/1.crl", "http://b/crl/1.crl"], aia=["http://a/ca/1.crt", "http://b/ca/1.crt"])
+    cdp = leaf.extensions.get_extension_for_class(x509.CRLDistributionPoints).value[0].full_name
+    aia = leaf.extensions.get_extension_for_class(x509.AuthorityInformationAccess).value
+    assert [g.value for g in cdp] == ["http://a/crl/1.crl", "http://b/crl/1.crl"] and len(aia) == 2
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

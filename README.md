@@ -45,7 +45,7 @@ Environment variables:
 |---|---|---|
 | `HOMECA_MASTER_KEY_FILE` | **required** | File containing the master key (12+ characters). Use a Docker/compose secret. |
 | `HOMECA_DATA` | `./data` (`/data` in the container) | Directory holding `homeca.db` |
-| `HOMECA_PUBLIC_URL` | unset | Base URL devices use to reach the plain-HTTP port, e.g. `http://ca.home.arpa:8080`. Embedded in issued certs as the CRL distribution point and CA-issuer (AIA) URL. If unset, those extensions are omitted. Keep it plain HTTP: clients must not need TLS to validate TLS. |
+| `HOMECA_PUBLIC_URL` | unset | Base URL devices use to reach the plain-HTTP port, e.g. `http://ca.home.arpa:8080`. Comma-separate to list several (e.g. LAN and VPN names). Embedded in issued certs as the CRL distribution point and CA-issuer (AIA) URL; it is fixed at issuance, so changing it later doesn't update existing certs (renew them). If unset, those extensions are omitted and a warning is logged at startup. Keep it plain HTTP: clients must not need TLS to validate TLS. |
 | `HOMECA_SECURE_COOKIE` | `0` | Set `1` once the UI is served over HTTPS by your reverse proxy |
 | `HOMECA_TRUSTED_PROXIES` | unset | Your reverse proxy's address or network (comma-separated), e.g. `172.28.0.1`. Only requests from it may name the real client in `X-Forwarded-For`; everyone else's header is ignored. Without it sign-in limits and the audit log see the proxy's address for every user. Unrelated to the ACME allowlist, which always uses the real peer address. |
 | `HOMECA_ACME_CLIENTS` | unset | Comma-separated CIDRs allowed to use ACME, e.g. `10.1.1.0/24` or NPM's IP. **Empty disables ACME.** |
@@ -143,6 +143,13 @@ The CSR's signature is checked, its public key and subject are kept, and HomeCA 
 profile. Extensions requested in the CSR other than SAN are ignored; SANs can be overridden in the UI.
 
 ## Revocation and CRLs
+
+CRL and CA-issuer locations are written into each certificate as absolute URIs (CRL Distribution Points,
+[RFC 5280 §4.2.1.13](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.13); Authority Information Access,
+[§4.2.2.1](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.2.1)). The issuer must therefore know its own public
+URL when it signs, which is why `HOMECA_PUBLIC_URL` is a setting rather than derived from the request, and why it
+cannot change for certificates already issued. A distribution point may list several URIs, which is what a
+comma-separated `HOMECA_PUBLIC_URL` produces.
 
 Revoking a certificate re-signs its issuer's CRL (30-day lifetime). A root has no issuer, so it
 cannot be revoked. A daily job re-signs CRLs that have under 15 days left, so no login is needed to keep

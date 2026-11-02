@@ -104,10 +104,11 @@ def issue(kind, subject, pub, signer_key, issuer_cert=None, days=365, *, sans=()
     else:
         raise ValueError("bad kind")
 
+    cdp, aia = [cdp] if isinstance(cdp, str) else cdp, [aia] if isinstance(aia, str) else aia  # str or list of URLs
     if issuer_cert is not None and cdp:
-        b = b.add_extension(x509.CRLDistributionPoints([x509.DistributionPoint([x509.UniformResourceIdentifier(cdp)], None, None, None)]), False)
+        b = b.add_extension(x509.CRLDistributionPoints([x509.DistributionPoint([x509.UniformResourceIdentifier(u) for u in cdp], None, None, None)]), False)
     if issuer_cert is not None and aia:
-        b = b.add_extension(x509.AuthorityInformationAccess([x509.AccessDescription(AIA_OID.CA_ISSUERS, x509.UniformResourceIdentifier(aia))]), False)
+        b = b.add_extension(x509.AuthorityInformationAccess([x509.AccessDescription(AIA_OID.CA_ISSUERS, x509.UniformResourceIdentifier(u)) for u in aia]), False)
     return b.sign(signer_key, _hash(signer_key))
 
 

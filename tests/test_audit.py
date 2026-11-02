@@ -112,3 +112,12 @@ def test_recording_inside_an_open_write_transaction_does_not_lock(client):
         c.execute("INSERT OR REPLACE INTO settings VALUES ('probe','1')")  # holds the write lock
         auditlog.audit('system', 'Inside transaction', c=c)
     assert 'Inside transaction' in actions(client)
+
+
+def test_events_are_also_emitted_as_json_lines(client, capsys):
+    import json
+    capsys.readouterr()
+    auditlog.audit('alice', 'Something happened', 'thing', 'detail')
+    event = json.loads(capsys.readouterr().out)
+    assert (event['actor'], event['action'], event['target'], event['detail'], event['app']) == ('alice', 'Something happened', 'thing', 'detail', 'homeca')
+    assert event['ts'].startswith('20')

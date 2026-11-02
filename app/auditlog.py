@@ -1,5 +1,6 @@
 """Append-only who/what/when record of administrative actions, for administrators only.
 Never pass passwords, private keys, tokens, secrets or certificate contents."""
+import json
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, Query
@@ -15,9 +16,10 @@ def audit(actor, action, target="", detail="", c=None):
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(days=AUDIT_DAYS)).isoformat(timespec="seconds")
 
+    row = (now.isoformat(timespec="seconds"), str(actor)[:100], action[:100], str(target)[:200], str(detail)[:500])
+
     def write(conn):
-        conn.execute("INSERT INTO audit (ts,actor,action,target,detail) VALUES (?,?,?,?,?)",
-                     (now.isoformat(timespec="seconds"), str(actor)[:100], action[:100], str(target)[:200], str(detail)[:500]))
+        conn.execute("INSERT INTO audit (ts,actor,action,target,detail) VALUES (?,?,?,?,?)", row)
         # Bounded by age and by row count, so a flood of events cannot grow the database without limit.
         conn.execute("DELETE FROM audit WHERE ts<? OR id<=(SELECT max(id) FROM audit)-?", (cutoff, AUDIT_ROWS))
 
@@ -26,6 +28,8 @@ def audit(actor, action, target="", detail="", c=None):
     else:
         with db() as conn:
             write(conn)
+    # One JSON line per event on stdout, for container log collectors (Loki, Graylog, journald). Same fields as the table.
+    print(json.dumps(dict(zip(("ts", "actor", "action", "target", "detail"), row), app="homeca"), ensure_ascii=False), flush=True)
 
 
 def register(app, session):

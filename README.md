@@ -358,3 +358,7 @@ cases. The ACME flow was also run end to end against real certbot (issue, renew,
 ## Not included
 
 DNS-01 / wildcards, OCSP, importing an existing CA, per-user roles, and master-key rotation.
+
+## AI disclosure
+
+Parts of this project's code, tests and documentation were written with the help of AI coding assistants. A human directs the work and reviews it. Use at your own risk, and read what it does before trusting it with your CA's keys.

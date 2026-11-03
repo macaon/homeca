@@ -251,7 +251,7 @@ openssl verify -x509_strict -CAfile root.pem -untrusted intermediate.pem leaf.pe
 ## Automatic certificates with ACME
 
 HomeCA speaks ACME (the Let's Encrypt protocol) with the HTTP-01 challenge, so Caddy,
-certbot, Nginx Proxy Manager, Proxmox and HomeCaddy can request and renew certificates on
+certbot, Nginx Proxy Manager, and Proxmox can request and renew certificates on
 their own. Certificates are 90 days by default, and the client renews them without you.
 
 **Turning it on:** open a valid **intermediate** and click **Use for ACME**. The ACME card

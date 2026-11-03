@@ -10,15 +10,15 @@ extensions cannot be forgotten.
 ## Features
 
 - Root, intermediate and leaf certificates with RFC 5280-correct extensions
-- **ACME server** (HTTP-01): Nginx Proxy Manager, certbot and Caddy can request and renew certificates automatically
+- **ACME server** (HTTP-01): Nginx Proxy Manager, certbot, Caddy and other ACME clients can request and renew certificates automatically
 - Sign CSRs from devices, so their private keys never leave them
 - Revocation with a signed CRL served over HTTP, refreshed automatically
 - Dashboard of expiring and expired certificates, with one-click renew
 - Downloads: certificate, full chain, DER, private key, PKCS#12
 - ECDSA P-256 / P-384 and RSA 2048 / 3072 / 4096 keys
-- Username/password login; private keys are encrypted at rest with a separate master key
-- Versioned HomeUI frontend with no build step or CDN; Auto, Light and Dark appearance
-- Tabbed server settings for interface defaults, private CA trust and optional OIDC login
+- Named administrator accounts, optional OIDC single sign-on, read-only API tokens for dashboards, and an audit log
+- Private keys are encrypted at rest with a master key kept separate from the data
+- Web UI with no build step or CDN; Auto, Light and Dark appearance
 
 ## Quick start (Docker or Podman)
 
@@ -37,6 +37,8 @@ Verify a chain yourself:
 
     openssl verify -x509_strict -CAfile root.pem -untrusted intermediate.pem leaf.pem
 
+A longer walkthrough is in [docs/usage.md](docs/usage.md).
+
 ## Configuration
 
 Environment variables:
@@ -52,25 +54,38 @@ Environment variables:
 | `HOMECA_ACME_HOSTNAME` | unset | Name ACME clients use for HomeCA, e.g. `ca.home.arpa`. HomeCA issues itself a TLS certificate for it. |
 | `HOMECA_TLS_PORT` | `8443` | Port of the HTTPS (ACME) listener |
 | `HOMECA_ACME_DAYS` | `90` | Lifetime of ACME-issued certificates |
+| `HOMECA_OIDC_ISSUER`, `HOMECA_OIDC_CLIENT_ID`, `HOMECA_OIDC_CLIENT_SECRET_FILE`, `HOMECA_OIDC_ADMIN_MATCH`, `HOMECA_OIDC_CA_FILE` | unset | Optional single sign-on configured from the environment. The same settings can be made in the UI (see below), which then takes precedence. |
 
 Put the UI behind your reverse proxy for TLS if you like, but keep `/crl/*` and `/ca/*` reachable over
 plain HTTP at `HOMECA_PUBLIC_URL`.
 
-## Interface and single sign-on
+## Server settings
 
-HomeCA vendors **HomeUI 0.1.1** from HomeTemplate under `app/static/ui/`; the adopted [design guideline](docs/design-guidelines.md) and `HOMEUI_VERSION` record the baseline. App-specific certificate styles remain separate.
+The settings cog beside your account name opens **Server settings**:
 
-The settings cog sits immediately left of the account name. The account menu contains password and logout. Appearance is configured under the settings cog. With one dashboard there is no navigation hamburger; certificate creation lives beside the certificate list.
+- **User Interface:** Auto, Light or Dark as the server default. Auto is the initial value, and the login page follows it. Each account can also choose its own date format.
+- **Trust:** upload public PEM/DER certificates or a PEM bundle for your identity provider. System roots and `HOMECA_OIDC_CA_FILE` remain trusted. Private keys are rejected. This trust store is separate from your issuing CA hierarchy.
+- **OAuth / OIDC:** enable SSO, paste an HTTPS issuer or full discovery URL, enter a client ID and secret, and list the usernames or verified emails allowed to sign in. The callback URL is `/auth/callback` on the external origin and is shown in the form. Saving does not need a restart; a saved secret shows as a masked placeholder, and leaving it blank keeps it.
+- **Access:** administrator accounts and API tokens.
 
-Under **Server settings**:
+The audit log opens from the **Logs** button beside the cog.
 
-- **User Interface:** choose Auto, Light or Dark as the server default. Auto is the initial value. The dashboard and login page both follow this setting; there is no separate account-menu appearance override.
-- **Trust:** upload multiple public PEM/DER certificates or a PEM bundle for your identity provider. System roots and `HOMECA_OIDC_CA_FILE` remain trusted. Private keys are rejected. Trust uploads are separate from your issuing CA hierarchy. The OAuth / OIDC tab links to Trust rather than having its own certificate field.
-- **OAuth / OIDC:** enable SSO, paste an HTTPS issuer or full discovery URL, enter a client ID/secret and explicitly list the administrator usernames or verified emails allowed to sign in. The callback remains `/auth/callback`, shown with the external origin in the settings form. Saving does not require a restart. Saved fields remain populated; a masked secret placeholder means leave blank to retain it.
+### Accounts and single sign-on
 
-Existing `HOMECA_OIDC_ISSUER`, `HOMECA_OIDC_CLIENT_ID`, `HOMECA_OIDC_CLIENT_SECRET_FILE`, `HOMECA_OIDC_ADMIN_MATCH` and `HOMECA_OIDC_CA_FILE` deployments continue to work. On the first save, the UI configuration takes precedence and the existing secret is encrypted into the database. Back up the database and master key as before. Local admin credentials, issued certificates, ACME configuration and CA keys are not migrated.
+Every account is a full administrator, and certificates and keys are shared between them. The first
+administrator, created at setup, is the protected recovery account and cannot be removed. Additional local
+accounts need passwords of at least 12 characters. Administrators can reset another account's password or
+remove an account; both revoke that account's sessions. Changing your own password signs out your other
+sessions.
 
-If SSO fails, the login page shows a safe error. Log in locally to check provider settings or upload its root under Trust. Keep a working local password for recovery.
+SSO identities are linked by issuer and subject to an exact username; a verified email can also be
+allowlisted. Allowlisted new identities get named, SSO-only administrator accounts. Removing an account
+blocks its username and linked subject from automatic provisioning until you add that username again
+explicitly. It does not remove certificates or keys.
+
+If SSO fails, the login page shows a safe error. Local login stays available so an identity-provider
+outage or expired provider certificate cannot lock you out of the CA; keep a working local password for
+recovery.
 
 ## Certificate profiles
 
@@ -159,6 +174,130 @@ Renewing a leaf in the UI issues a new certificate (new key if HomeCA holds the 
 device's existing public key) and marks the old one "superseded" without revoking it. Revoke it yourself
 if the old key may be compromised. Intermediates and roots cannot be renewed; create a new one.
 
+## API
+
+The web UI is a client of a JSON API under `/api`, and you can script against it. It is not versioned,
+so read the release notes before upgrading.
+
+**Conventions**
+
+- Request and response bodies are JSON. Send `Content-Type: application/json` on writes; a few settings
+  routes reject anything else with `415`.
+- Errors are `{"detail": "message"}` with a matching status: `400` bad input, `401` not signed in,
+  `403` wrong current password, `404` not found, `409` conflict, `429` too many failed attempts.
+- **Authentication** is a session cookie named `homeca`, set by `POST /api/login` (`HttpOnly`,
+  `SameSite=Strict`, 12 hours; sessions are in memory, so a restart signs everyone out). `GET /api/summary`
+  also accepts `Authorization: Bearer <token>` with a Read API token; no other route does.
+- Every route below needs a session unless it says otherwise. All signed-in accounts are administrators.
+- Timestamps are ISO 8601 UTC strings.
+
+Example:
+
+    curl -c jar -H 'Content-Type: application/json' -d '{"username":"admin","password":"…"}' https://ca.example.net/api/login
+    curl -b jar https://ca.example.net/api/certs
+
+### Session and account
+
+| Route | Purpose |
+|---|---|
+| `GET /api/state` | **No login needed.** `{setup_needed, logged_in, user, local, sso, ui: {theme}, date_format}` |
+| `POST /api/setup` | **No login needed.** Create the first administrator, only while `setup_needed` (`{"username", "password"}`, password 12+ characters). Signs you in. `409` once set up. |
+| `POST /api/login` | **No login needed.** `{"username", "password"}`; `401` on failure, throttled with `429` |
+| `POST /api/logout` | End the session |
+| `POST /api/password` | Change your own password (`{"current", "new"}`); `403` if `current` is wrong. Signs out your other sessions. |
+| `GET /api/preferences`, `PUT /api/preferences` | Per-account preferences: `{"date_format": "auto"\|"iso"\|"day"\|"month"}` |
+| `GET /login/oidc`, `GET /auth/callback` | Browser redirects for single sign-on; not for scripts |
+
+### Certificates
+
+| Route | Purpose |
+|---|---|
+| `GET /api/certs` | All certificates: `id, parent_id, kind, cn, not_after, status, days_left, superseded, sans, has_key, crl_next, acme, self` |
+| `GET /api/certs/{id}` | One certificate with `subject`, `issuer`, `serial`, `not_before`, `not_after`, `revoked_at`, `revoke_reason`, `sha256`, decoded `extensions` and the issuing `params` |
+| `POST /api/certs` | Create a certificate; returns `{"id"}` (body below) |
+| `POST /api/certs/sign-csr` | Sign a CSR; returns `{"id"}` (body below) |
+| `POST /api/certs/{id}/renew` | Re-issue a leaf and mark the old one superseded; returns `{"id"}` of the new one. `400` for roots, intermediates and ACME-managed certificates. |
+| `POST /api/certs/{id}/revoke` | `{"reason": "unspecified"\|"key_compromise"\|"affiliation_changed"\|"superseded"\|"cessation_of_operation"}`; re-signs the issuer's CRL |
+| `DELETE /api/certs/{id}` | Delete; `409` while it has issued certificates |
+| `GET /api/certs/{id}/download?format=…` | `pem` (default), `der`, `chain` (certificate plus ancestors), `key` (private key, PEM) or `p12` (PKCS#12; set its password with `pw_p12`). Private-key downloads are audited. |
+
+`status` is one of `valid`, `expiring` (under 30 days), `expired` or `revoked`. `kind` is `root`,
+`intermediate` or `leaf`.
+
+`POST /api/certs`:
+
+| Field | Meaning |
+|---|---|
+| `kind` | `root`, `intermediate` or `leaf` (required) |
+| `parent_id` | Issuing CA's id; omit for a root, required otherwise |
+| `subject` | Object with any of `c`, `st`, `l`, `o`, `ou`, `cn` |
+| `sans` | Subject alternative names for leaves, plain names or IP addresses, e.g. `["host.home.arpa", "192.168.1.1"]` |
+| `key_type` | `ec256` (default), `ec384`, `rsa2048`, `rsa3072`, `rsa4096` |
+| `days` | Validity, 1 to 36500 (default 365); clamped to the issuer's `notAfter` |
+| `path_len` | Intermediate path length, 0 to 10 (default 0) |
+| `permitted` | Intermediate name constraints, e.g. `["home.arpa", "10.0.0.0/8"]` |
+| `usage` | Leaf extended key usage: `server` (default), `client` or `both` |
+
+`POST /api/certs/sign-csr`: `parent_id` (the issuing CA, required), `csr_pem` (required), `sans` (omit to
+keep the CSR's), `days` and `usage` as above.
+
+### ACME
+
+| Route | Purpose |
+|---|---|
+| `GET /api/acme` | `{enabled, ca_id, ca_cn, clients, hostname, tls_port, days, directory}` |
+| `POST /api/acme/ca` | Choose the issuing intermediate (`{"id": 2}`) or disable ACME (`{"id": null}`). Returns the new status; `400` if the CA isn't a valid intermediate or its name constraints exclude `HOMECA_ACME_HOSTNAME`. |
+| `/acme/*` | The ACME protocol itself (directory, new-account, new-order, …) on the HTTPS port; used by ACME clients, not by scripts |
+
+### Summary for dashboards
+
+`GET /api/summary` takes a session **or** a Read API token:
+
+    curl -H "Authorization: Bearer homeca_…" https://ca.example.net/api/summary
+
+It returns the numbers the UI's overview shows, plus what needs attention, and nothing that identifies a key or certificate body:
+
+- `roots`, `intermediates`, `active_leaves`, `expiring` (under 30 days), `expired`, `revoked`. Superseded leaves (renewed since) are ignored, as in the UI.
+- `authorities`: for each root and intermediate, its `kind`, `cn`, `status`, `days_left`, when its CRL is next due (`crl_next`) and `crl_overdue`.
+- `attention`: up to 20 non-revoked, non-superseded certificates that are expiring or expired, with `cn`, `kind`, `status`, `days_left` and whether ACME issued them. This is the one place a name of an issued certificate appears; SANs, serial numbers, PEM data and keys never do.
+- `acme`: `{enabled, ca}`, whether ACME is enabled and the issuing CA's name.
+
+### API tokens
+
+Create them under **Server settings → Access**. There is one level, **Read**, and it opens `GET /api/summary` and nothing else.
+
+| Route | Purpose |
+|---|---|
+| `GET /api/tokens` | `{tokens: [{id, name, scope, owner, created, expires, last_used, expired}], scopes}` |
+| `POST /api/tokens` | `{"name", "scope": "read", "expires_days"?}` (days 1 to 3650, omit for no expiry). Returns `{"id", "token"}`; **the token is shown only in this response.** At most 100 tokens; names are unique. |
+| `DELETE /api/tokens/{id}` | Revoke |
+
+### Accounts, settings and audit
+
+| Route | Purpose |
+|---|---|
+| `GET /api/users` | `[{username, local, primary, admin}]` |
+| `POST /api/users` | Add a local account (`{"username", "password"}`; username letters, digits and `_ . @ -`, password 12+ characters) |
+| `PUT /api/users/{username}/password` | Reset another account's password (`{"password"}`); revokes its sessions. Use `/api/password` for your own. |
+| `DELETE /api/users/{username}` | Remove an account and its tokens. You cannot remove yourself or the original administrator. |
+| `GET /api/settings` | `{ui: {theme}, oidc, oidc_secret_configured, callback_url}`; the client secret is never returned |
+| `PUT /api/settings/interface` | `{"theme": "auto"\|"light"\|"dark"}`, the server default appearance |
+| `PUT /api/settings/oidc` | `{enabled, issuer, client_id, client_secret, allowed_users}`; a blank `client_secret` keeps the saved one |
+| `GET /api/settings/trust` | Uploaded provider trust certificates |
+| `POST /api/settings/trust` | `{"name", "certificate"}` (PEM, DER or a PEM bundle); private keys are rejected |
+| `DELETE /api/settings/trust/{fingerprint}` | Remove a trust certificate |
+| `GET /api/audit?before=&limit=` | Audit entries `{id, ts, actor, action, target, detail}`, newest first. `limit` is 1 to 200 (default 50); pass the last `id` as `before` to page. The response is `{entries, more}`. |
+
+### Public endpoints (no login)
+
+Devices fetch these over plain HTTP, so keep them reachable at `HOMECA_PUBLIC_URL`.
+
+| Route | Returns |
+|---|---|
+| `GET /crl/{id}.crl` | The CA's current CRL (DER) |
+| `GET /ca/{id}.crt` | A root or intermediate certificate, DER |
+| `GET /ca/{id}.pem` | A root or intermediate certificate, PEM |
+
 ## Security model
 
 - **Two secrets.** The admin **password** only logs you in (scrypt-hashed). The **master key** file
@@ -166,18 +305,15 @@ if the old key may be compromised. Intermediates and roots cannot be renewed; cr
   which ACME and the daily CRL job need. A stolen backup or volume is useless without the master key;
   anyone who can read both the running container's secret and its data can use the CA.
 - Losing the master key means losing every stored private key. Keep a copy somewhere safe, separate from backups.
-- You can change the admin password in the UI. The master key cannot be rotated in place.
+- You can change the admin password in the UI. The master key cannot be rotated in place. Saved SSO provider secrets are encrypted with a key derived from it.
 - Sessions live in memory with an `HttpOnly`, `SameSite=Strict` cookie; a restart logs everyone out.
-  After 10 failed sign-ins for an account from one source within five minutes (or 30 from one source across accounts) further attempts get HTTP 429 until the window passes; the same applies to wrong current passwords and to invalid API tokens. Only failures count. The first block, and at most one failed sign-in a minute per source, are audited. The shared `home_security.py` implements this. The API only accepts JSON, which together with
-  `SameSite=Strict` covers CSRF.
+  After 10 failed sign-ins for an account from one source within five minutes (or 30 from one source across accounts) further attempts get HTTP 429 until the window passes; the same applies to wrong current passwords and to invalid API tokens. Only failures count. The first block, and at most one failed sign-in a minute per source, are audited. The API only accepts JSON, which together with `SameSite=Strict` covers CSRF.
 - A logged-in session can download private keys. Treat access to the UI as access to the CA.
 - ACME needs three things to issue: the client's address in `HOMECA_ACME_CLIENTS`, proof of control of the
   name over HTTP-01, and the name being inside the chosen CA's name constraints.
-- Optional **OIDC/Keycloak login** is configured under **Server settings → OAuth / OIDC**. Local login stays available so an identity-provider outage or expired certificate cannot prevent CA recovery.
-- Only explicitly allowed usernames or verified email addresses may use SSO. They use named administrator accounts with full access, including private-key downloads. The original local administrator remains the protected recovery account. Saved provider secrets are encrypted using a separate key derived from the existing master key.
-- Public unauthenticated endpoints: `/crl/<id>.crl`, `/ca/<id>.crt`, `/ca/<id>.pem`.
-- **API tokens** (Server settings → Access → API tokens) let a dashboard or monitor read `GET /api/summary` without a login. There is one level, **Read**, and it opens that one route: a token can never download a private key, list or fetch certificates, issue, renew, revoke or delete anything, change settings, read the audit log or manage tokens. Tokens belong to an administrator, are stored only as a SHA-256 hash, are shown once, can expire, and stop working when revoked or when their owner is removed. A bearer header never falls back to a login session, and repeated invalid tokens are throttled. Creating and revoking tokens is audited.
-- **Audit log**, opened from the Logs button beside the settings cog, records who did what and when: sign-ins and failures, account and settings changes, every certificate created, signed, renewed, revoked or deleted, downloads of private keys and PKCS#12 bundles, the ACME issuing CA, and what ACME clients and the daily CRL job do (as `ACME client …` and `system`). Entries are kept 90 days (at most 50,000). Failed sign-ins are recorded once per source per minute. Passwords, keys, tokens, provider secrets and certificate contents are never written to it. Downloading public certificates is not recorded.
+- Only explicitly allowed usernames or verified email addresses may use SSO, and they become full administrators with private-key access.
+- **API tokens** let a dashboard or monitor read `GET /api/summary` without a login. A token can never download a private key, list or fetch certificates, issue, renew, revoke or delete anything, change settings, read the audit log or manage tokens. Tokens belong to an administrator, are stored only as a SHA-256 hash, are shown once, can expire, and stop working when revoked or when their owner is removed. A bearer header never falls back to a login session. Creating and revoking tokens is audited.
+- **Audit log** records who did what and when: sign-ins and failures, account and settings changes, every certificate created, signed, renewed, revoked or deleted, downloads of private keys and PKCS#12 bundles, the ACME issuing CA, and what ACME clients and the daily CRL job do (as `ACME client …` and `system`). Entries are kept 90 days (at most 50,000). Failed sign-ins are recorded once per source per minute. Passwords, keys, tokens, provider secrets and certificate contents are never written to it. Downloading public certificates is not recorded. Each event is also written as one JSON line on stdout for log collectors.
 
 ### Upgrading from the passphrase version
 
@@ -189,55 +325,24 @@ re-encrypted. The first visit then asks you to create the admin user.
 
     docker run --rm -v homeca-data:/d -v "$PWD":/b alpine tar czf /b/homeca-backup.tgz -C /d .
 
-The volume holds only `homeca.db` (encrypted keys, certificates, CRLs, ACME accounts) and `tls/`.
+The volume holds `homeca.db` (encrypted keys, certificates, CRLs, ACME accounts, accounts, SSO links, settings and the audit log) and `tls/`.
 Back up `master.key` separately; the backup is useless without it, and it is useless without the backup.
-
-## API
-
-All `/api` routes except `state`, `setup` and `login` need the session cookie.
-
-| Route | Purpose |
-|---|---|
-| `GET /api/state` | `{setup_needed, logged_in, user}` |
-| `POST /api/setup`, `/api/login`, `/api/logout` | Authentication (`{"username": "...", "password": "..."}`) |
-| `POST /api/password` | Change the admin password (`{"current", "new"}`) |
-| `GET /api/certs` | All certificates with status and days left |
-| `GET /api/certs/{id}` | Details and decoded extensions |
-| `POST /api/certs` | Create root / intermediate / leaf |
-| `POST /api/certs/sign-csr` | Sign a CSR |
-| `POST /api/certs/{id}/renew` | Re-issue a leaf (not ACME-managed ones) |
-| `POST /api/certs/{id}/revoke` | Revoke with a reason |
-| `DELETE /api/certs/{id}` | Delete (only if it has issued nothing) |
-| `GET /api/certs/{id}/download?format=pem\|der\|chain\|key\|p12` | Download; `pw_p12` sets the PKCS#12 password |
-| `GET /api/summary` | Dashboard summary (login session **or** a Read API token); see below |
-| `GET /api/tokens`, `POST /api/tokens`, `DELETE /api/tokens/{id}` | Manage API tokens (login session only) |
-| `GET /api/audit?before=&limit=` | Audit entries, newest first (`before` is an entry id; `more` says whether older ones exist) |
-| `GET /api/acme`, `POST /api/acme/ca` | ACME status; choose the issuing intermediate (`{"id": 2}` or `{"id": null}`) |
-| `/acme/*` | The ACME protocol itself (directory, new-account, new-order, ...) |
-
-### Summary for dashboards
-
-    curl -H "Authorization: Bearer homeca_…" https://ca.example.net/api/summary
-
-Returns the numbers the UI's overview shows, plus what needs attention, and nothing that identifies a key or certificate body:
-
-- `roots`, `intermediates`, `active_leaves`, `expiring` (30 days or less), `expired`, `revoked`. Superseded leaves (renewed since) are ignored, as in the UI.
-- `authorities`: for each root and intermediate, its common name, `status`, `days_left`, when its CRL is next due (`crl_next`) and `crl_overdue`.
-- `attention`: up to 20 non-revoked, non-superseded certificates that are expiring or expired, with common name, `days_left` and whether ACME issued them. This is the one place a name of an issued certificate appears; SANs, serial numbers, PEM data and keys never do.
-- `acme`: whether ACME is enabled and the issuing CA's name.
+Back up before upgrading; the app restarts and signs everyone out.
 
 ## Layout
 
-    app/pki.py       X.509 building (keys, profiles, CRL, PKCS#12)
-    app/ca.py        shared CA operations: master key, storage, CRLs, revocation
-    app/auditlog.py  audit log: who did what, and GET /api/audit
-    app/apitokens.py read-only API tokens: management routes and the session-or-token dependency
-    app/acme.py      ACME server (RFC 8555, HTTP-01)
-    app/main.py      FastAPI routes, auth, public CRL/CA endpoints
-    app/__main__.py  entry point: HTTP :8080 and the HTTPS ACME listener with live certificate reload
-    app/store.py     SQLite schema and connection helper
-    app/static/      index.html, app.js, style.css
-    tests/           test_pki.py, test_acme.py
+    app/pki.py         X.509 building (keys, profiles, CRL, PKCS#12)
+    app/ca.py          shared CA operations: master key, storage, CRLs, revocation
+    app/acme.py        ACME server (RFC 8555, HTTP-01)
+    app/main.py        FastAPI routes, auth, public CRL/CA endpoints
+    app/accounts.py    administrator accounts
+    app/apitokens.py   read-only API tokens
+    app/auditlog.py    audit log and GET /api/audit
+    app/preferences.py per-account preferences, OIDC and trust settings
+    app/__main__.py    entry point: HTTP :8080 and the HTTPS ACME listener with live certificate reload
+    app/store.py       SQLite schema and connection helper
+    app/static/        the web UI (vendored, no build step)
+    tests/             test suite
     Containerfile, compose.yaml
 
 ## Development
@@ -252,18 +357,8 @@ cases. The ACME flow was also run end to end against real certbot (issue, renew,
 
 ## Not included
 
-DNS-01 / wildcards, OCSP, importing an existing CA, multiple users, and master-key rotation.
+DNS-01 / wildcards, OCSP, importing an existing CA, per-user roles, and master-key rotation.
 
 ---
 
 Built with the assistance of Claude (Anthropic).
-
-Trust uses the unchanged shared HomeTemplate `home-trust.js` and `home-trust.css` component. Uploads, certificate rows, messages and removal confirmation have one layout across Home* apps. OIDC provider roots belong in Trust. App-specific scope details are under “Where this trust store applies.”
-
-## Administrator accounts
-
-Server settings → Access groups named administrator accounts and OAuth / OIDC settings. Every account has full administrative access, matching HomeCaddy; application data remains shared. The original local administrator is migrated without changing its password and cannot be removed. Additional local accounts use passwords of at least 12 characters. Administrators can reset another account’s local password or remove an additional account; both actions revoke that account’s sessions. Password changes sign out only that account’s other sessions.
-
-SSO identities are linked by issuer and subject to an exact username, with a verified email available for explicit allowlisting. Explicitly allowlisted new identities receive named SSO-only administrator accounts. The legacy environment-configured administrator match retains its original recovery-account mapping. Removing an account blocks its username and linked SSO subject from automatic provisioning; adding that username explicitly restores access. Removing an account does not remove certificates, keys, registry images or other shared application data.
-
-Back up the application database before upgrading; it now also contains user password hashes, SSO links and removed-account blocks. Existing encryption/master-key backups remain necessary. Upgrading restarts the app and signs out existing in-memory sessions.

@@ -212,8 +212,8 @@ def _oidc_login(c, ident):
 
 
 def _external_url(request: Request, path: str) -> str:
-    """Like request.url_for, but trusts Caddy's forwarded scheme/host for just this one URL - unlike HomeCaddy,
-    homeca can't turn on uvicorn's proxy_headers globally: the ACME client allowlist needs the real peer IP,
+    """Like request.url_for, but trusts Caddy's forwarded scheme/host for just this one URL. homeca
+    can't turn on uvicorn's proxy_headers globally: the ACME client allowlist needs the real peer IP,
     not whatever a spoofable X-Forwarded-For claims, so that stays proxy_headers=False everywhere else."""
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))

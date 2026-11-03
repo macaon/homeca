@@ -358,7 +358,3 @@ cases. The ACME flow was also run end to end against real certbot (issue, renew,
 ## Not included
 
 DNS-01 / wildcards, OCSP, importing an existing CA, per-user roles, and master-key rotation.
-
----
-
-Built with the assistance of Claude (Anthropic).
